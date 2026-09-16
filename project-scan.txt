@@ -1,0 +1,145 @@
+=== 1. PACKAGE.JSON ===
+{
+  "name": "poultry-erp",
+  "version": "2.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.116.0",
+    "chart.js": "^4.5.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.441.0",
+    "next": "^16.3.4",
+    "react": "^18.3.1",
+    "react-chartjs-2": "^5.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^3.10.1",
+    "tailwind-merge": "^2.6.1",
+    "xlsx": "^0.18.5",
+    "xlsx-js-style": "^1.2.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^20.16.5",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.5.5",
+    "postcss": "^8.5.28",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.6.2"
+  }
+}
+
+
+=== 2. ENV (بدون مفاتيح) ===
+NEXT_PUBLIC_SUPABASE_URL=***
+NEXT_PUBLIC_SUPABASE_ANON_KEY=***
+
+=== 3. شجرة app/ ===
+app\(dashboard)\customers\page.tsx  [448 سطر]
+app\(dashboard)\dashboard\page.tsx  [137 سطر]
+app\(dashboard)\inventory\page.tsx  [565 سطر]
+app\(dashboard)\production\page.tsx  [374 سطر]
+app\(dashboard)\reports\page.tsx  [926 سطر]
+app\(dashboard)\sales\page.tsx  [697 سطر]
+app\(dashboard)\settings\page.tsx  [1176 سطر]
+app\(dashboard)\suppliers\page.tsx  [417 سطر]
+app\(dashboard)\treasury\page.tsx  [541 سطر]
+app\(dashboard)\layout.tsx  [121 سطر]
+app\login\page.tsx  [123 سطر]
+app\globals.css  [23 سطر]
+app\layout.tsx  [21 سطر]
+app\page.tsx  [105 سطر]
+
+=== 4. شجرة components/ ===
+components\DataTable.tsx  [435 سطر]
+components\TourGuide.tsx  [98 سطر]
+
+=== 5. شجرة lib/ ===
+lib\supabase\client.ts
+lib\supabase\server.ts
+
+=== 6. استيرادات lucide ===
+--- app\(dashboard)\customers\page.tsx ---
+import { FileText, Wallet, History, TrendingDown, TrendingUp, Download } from 'lucide-react';
+--- app\(dashboard)\dashboard\page.tsx ---
+import { Wallet } from 'lucide-react';
+--- app\(dashboard)\inventory\page.tsx ---
+import { Package, Plus, X, Truck, ShoppingCart, Snowflake, Sun, RefreshCw } from 'lucide-react';
+--- app\(dashboard)\reports\page.tsx ---
+import { Scale, FileSpreadsheet, Printer, Lock, RefreshCw, BarChart3, PieChart as PieChartIcon, TrendingUp, Download, Columns3, Search, X, AlertTriangle } from 'lucide-react';
+--- app\(dashboard)\sales\page.tsx ---
+import { AlertTriangle } from 'lucide-react';
+--- app\(dashboard)\settings\page.tsx ---
+import { Plus, Trash2, BookOpen, Wallet, X, ChevronDown, ChevronLeft, Package, AlertTriangle, RefreshCw, Eye, EyeOff, Truck, Pencil, Building2, UserCheck, Users, Boxes, Bell, BellOff } from 'lucide-react';
+--- app\(dashboard)\suppliers\page.tsx ---
+import { Wallet, History, TrendingDown, TrendingUp, Download } from 'lucide-react';
+--- app\(dashboard)\treasury\page.tsx ---
+import { Wallet, Building2, UserCheck, Plus, X, RefreshCw } from 'lucide-react';
+--- app\(dashboard)\layout.tsx ---
+} from 'lucide-react';
+--- app\login\page.tsx ---
+import { Lock, User, AlertCircle } from 'lucide-react';
+--- app\page.tsx ---
+import { ArrowLeft, ShieldCheck, Scale, Truck, TrendingUp } from 'lucide-react';
+--- components\DataTable.tsx ---
+import { Download, Columns3, RotateCcw, Search, X, GripVertical, Filter, Calendar } from 'lucide-react';
+--- components\TourGuide.tsx ---
+import { ArrowLeft, ArrowRight, X, LayoutDashboard, Scissors, Warehouse, ShoppingCart, Wallet, Users, Truck, FileText, Settings } from 'lucide-react';
+
+=== 7. جداول Supabase المستخدمة ===
+batches, customers, financial_vouchers, inventory, inventory_adjustments, inventory_lots, market_prices, pathway_products, sales_invoices, sales_items, slaughter_pathways, suppliers, system_settings, system_users, treasury_accounts, yield_processing
+
+=== 8. useState في sales/page.tsx ===
+3: import { useState, useEffect } from 'react';
+10: const [toast, setToast] = useState<{ msg: string; type: string } | null>(null);
+11: const [availableProducts, setAvailableProducts] = useState<any[]>([]);
+12: const [showLowPriceModal, setShowLowPriceModal] = useState(false);
+13: const [lowPriceItems, setLowPriceItems] = useState<any[]>([]);
+14: const [minMargin, setMinMargin] = useState(0);
+15: const [recentInvoices, setRecentInvoices] = useState<any[]>([]);
+16: const [invoiceDetail, setInvoiceDetail] = useState<any>(null);
+17: const [invoiceDetailItems, setInvoiceDetailItems] = useState<any[]>([]);
+18: const [showCancelModal, setShowCancelModal] = useState(false);
+19: const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+20: const [cancelReason, setCancelReason] = useState('');
+21: const [isAdmin, setIsAdmin] = useState(false);
+22: const [customerName, setCustomerName] = useState('');
+23: const [phone, setPhone] = useState('');
+24: const [paymentType, setPaymentType] = useState('cash');
+25: const [paidAmount, setPaidAmount] = useState(0);
+26: const [marketPrice, setMarketPrice] = useState<number>(0);
+27: const [showPriceDeviationModal, setShowPriceDeviationModal] = useState(false);
+28: const [priceDeviations, setPriceDeviations] = useState<any[]>([]);
+30: const [items, setItems] = useState<any[]>([
+
+=== 9. useState في reports/page.tsx ===
+3: import { useState, useEffect, useMemo } from 'react';
+12: const [activeView, setActiveView] = useState('journal');
+13: const [toast, setToast] = useState<{ msg: string; type: string } | null>(null);
+14: const [loading, setLoading] = useState(false);
+15: const [dateFrom, setDateFrom] = useState(new Date().toISOString().split('T')[0]);
+16: const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0]);
+18: const [summary, setSummary] = useState({
+29: const [journalEntries, setJournalEntries] = useState<any[]>([]);
+30: const [journalDetail, setJournalDetail] = useState<any>(null);
+31: const [journalDetailItems, setJournalDetailItems] = useState<any[]>([]);
+32: const [journalDetailDeviations, setJournalDetailDeviations] = useState<any[]>([]);
+33: const [selectedAccount, setSelectedAccount] = useState<any>(null);
+34: const [accountSearch, setAccountSearch] = useState('');
+35: const [accountVisibleCols, setAccountVisibleCols] = useState<string[]>(['date', 'type', 'entity', 'ref', 'amount']);
+36: const [showAccountCols, setShowAccountCols] = useState(false);
+37: const [accountDates, setAccountDates] = useState<any>({});
+38: const [showClosingModal, setShowClosingModal] = useState(false);
+39: const [topProducts, setTopProducts] = useState<any[]>([]);
+40: const [topCustomers, setTopCustomers] = useState<any[]>([]);
+41: const [salesTrend, setSalesTrend] = useState<any[]>([]);
+42: const [accountMovements, setAccountMovements] = useState<any[]>([]);
+43: const [movementDetail, setMovementDetail] = useState<any>(null);
+44: const [movementDetailItems, setMovementDetailItems] = useState<any[]>([]);
