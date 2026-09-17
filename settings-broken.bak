@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Plus, Trash2, BookOpen, Wallet, X, ChevronDown, ChevronLeft, Package, AlertTriangle, RefreshCw, Eye, EyeOff, Truck, Pencil, Building2, UserCheck, Users, Boxes, Bell, BellOff } from 'lucide-react';
+import { Plus, Trash2, BookOpen, Wallet, X, ChevronDown, ChevronLeft, Package, AlertTriangle, RefreshCw, Eye, EyeOff, Truck, Pencil, Building2, UserCheck, Users, Boxes, Bell, BellOff, Save, CheckCircle } from 'lucide-react';
 
 export default function SettingsPage() {
   const supabase = createClient();
@@ -396,6 +396,68 @@ export default function SettingsPage() {
     showToast('تم حفظ إعدادات التنبيهات');
   };
 
+  const getSubTabName = (tab: string) => {
+    if (tab === 'treasuries') return 'الخزائن';
+    if (tab === 'customers') return 'العملاء';
+    if (tab === 'suppliers') return 'الموردين';
+    if (tab === 'inventory') return 'بضاعة الثلاجة';
+    return tab;
+  };
+
+  const saveSubTab = async (tab: string) => {
+    if (openingLocked) { showToast('الأرصدة مقفلة', 'error'); return 0; }
+    let count = 0;
+    try {
+      if (tab === 'treasuries') {
+        await supabase.from('financial_vouchers').delete().eq('type', 'opening_treasury');
+        for (const t of openTreasuries) {
+          if (Number(t.balance) > 0) {
+            await supabase.from('financial_vouchers').insert([{ type: 'opening_treasury', entity_name: 'رصيد افتتاحي - ' + t.name, amount: Number(t.balance), payment_method: 'cash', treasury_code: t.code, notes: 'رصيد افتتاحي مرحّل' }]);
+            count++;
+          }
+        }
+      } else if (tab === 'customers') {
+        const { data: oldV } = await supabase.from('financial_vouchers').select('entity_name').eq('type', 'opening_debit');
+        await supabase.from('financial_vouchers').delete().eq('type', 'opening_debit');
+        for (const v of (oldV || [])) { await supabase.from('customers').update({ balance: 0 }).eq('name', v.entity_name); }
+        for (const cst of openCustomers) {
+          if (!cst.name.trim() || Number(cst.balance) <= 0) continue;
+          const { data: existing } = await supabase.from('customers').select('id').eq('name', cst.name.trim()).maybeSingle();
+          if (existing) { await supabase.from('customers').update({ balance: Number(cst.balance), phone: cst.phone?.trim() || null }).eq('id', existing.id); }
+          else { await supabase.from('customers').insert([{ name: cst.name.trim(), phone: cst.phone?.trim() || null, balance: Number(cst.balance), is_active: true }]); }
+          await supabase.from('financial_vouchers').insert([{ type: 'opening_debit', entity_name: cst.name.trim(), amount: Number(cst.balance), payment_method: 'cash', notes: 'رصيد افتتاحي - مديونية سابقة' }]);
+          count++;
+        }
+      } else if (tab === 'suppliers') {
+        const { data: oldV } = await supabase.from('financial_vouchers').select('entity_name').eq('type', 'opening_credit');
+        await supabase.from('financial_vouchers').delete().eq('type', 'opening_credit');
+        for (const v of (oldV || [])) { await supabase.from('suppliers').update({ balance: 0 }).eq('name', v.entity_name); }
+        for (const sup of openSuppliers) {
+          if (!sup.name.trim() || Number(sup.balance) <= 0) continue;
+          const { data: existing } = await supabase.from('suppliers').select('id').eq('name', sup.name.trim()).maybeSingle();
+          if (existing) { await supabase.from('suppliers').update({ balance: Number(sup.balance), phone: sup.phone?.trim() || null }).eq('id', existing.id); }
+          else { await supabase.from('suppliers').insert([{ name: sup.name.trim(), phone: sup.phone?.trim() || null, balance: Number(sup.balance), is_active: true }]); }
+          await supabase.from('financial_vouchers').insert([{ type: 'opening_credit', entity_name: sup.name.trim(), amount: Number(sup.balance), payment_method: 'cash', notes: 'رصيد افتتاحي - مستحق سابق' }]);
+          count++;
+        }
+      } else if (tab === 'inventory') {
+        await supabase.from('inventory_lots').delete().eq('source_ref', 'OPENING-BALANCE');
+        for (const st of openStock) {
+          if (Number(st.weight) <= 0) continue;
+          await supabase.from('inventory').update({ stock_kg: Number(st.weight), last_updated: new Date().toISOString() }).eq('product_code', st.code);
+          await supabase.from('inventory_lots').insert([{ product_code: st.code, source_type: 'opening', source_ref: 'OPENING-BALANCE', quantity_kg: Number(st.weight), remaining_kg: Number(st.weight), cost_per_kg: Number(st.cost) || 0 }]);
+          count++;
+        }
+      }
+      setSavedSubTabs(prev => ({ ...prev, [tab]: true }));
+      return count;
+    } catch (err: any) {
+      showToast('خطأ: ' + err.message, 'error');
+      return 0;
+    }
+  };
+
+
   const saveSubTab = async (tab: string) => {
     if (openingLocked) { showToast('الأرصدة مقفلة', 'error'); return 0; }
     let saved = 0;
@@ -471,7 +533,7 @@ export default function SettingsPage() {
 
   const handleSaveCurrentTab = async () => {
     const saved = await saveSubTab(openingSubTab);
-    showToast('تم حفظ ' + saved + ' سجل في التبويب الحالي');
+    showToast('تم حفظ ' + saved + ' سجل');
     loadData();
   };
 
@@ -499,60 +561,6 @@ export default function SettingsPage() {
     loadData();
   };
 
-  // تحميل الأرصدة الافتتاحية المحفوظة بعد القفل
-  useEffect(() => {
-    if (!openingLocked) return;
-    (async () => {
-      // 1. بضاعة الثلاجة
-      const { data: lots } = await supabase.from('inventory_lots').select('*').eq('source_type', 'opening');
-      if (lots && lots.length > 0) {
-        setOpenStock(prev => {
-          const map: any = {};
-          prev.forEach((s: any) => { map[s.code] = { ...s }; });
-          lots.forEach((l: any) => {
-            if (map[l.product_code]) {
-              map[l.product_code].weight = Number(l.quantity_kg || 0);
-              map[l.product_code].cost = Number(l.cost_per_kg || 0);
-            }
-          });
-          return Object.values(map);
-        });
-      }
-
-      // 2. الخزائن
-      const { data: treas } = await supabase.from('financial_vouchers').select('*').eq('type', 'opening_treasury');
-      if (treas && treas.length > 0) {
-        setOpenTreasuries(prev => {
-          const map: any = {};
-          prev.forEach((t: any) => { map[t.code] = { ...t }; });
-          treas.forEach((v: any) => {
-            if (map[v.treasury_code]) map[v.treasury_code].balance = Number(v.amount || 0);
-          });
-          return Object.values(map);
-        });
-      }
-
-      // 3. العملاء
-      const { data: custV } = await supabase.from('financial_vouchers').select('*').eq('type', 'opening_debit');
-      const { data: custList } = await supabase.from('customers').select('*');
-      if (custV && custV.length > 0) {
-        setOpenCustomers(custV.map((v: any) => {
-          const c = (custList || []).find((x: any) => x.name === v.entity_name);
-          return { name: v.entity_name || '', phone: c?.phone || '', balance: Number(v.amount || 0) };
-        }));
-      }
-
-      // 4. الموردين
-      const { data: suppV } = await supabase.from('financial_vouchers').select('*').eq('type', 'opening_credit');
-      const { data: suppList } = await supabase.from('suppliers').select('*');
-      if (suppV && suppV.length > 0) {
-        setOpenSuppliers(suppV.map((v: any) => {
-          const s = (suppList || []).find((x: any) => x.name === v.entity_name);
-          return { name: v.entity_name || '', phone: s?.phone || '', balance: Number(v.amount || 0) };
-        }));
-      }
-    })();
-  }, [openingLocked]);
   const displayedProducts = showArchived ? products : products.filter(p => p.is_active !== false);
   const displayedPathways = showArchived ? pathways : pathways.filter(p => p.is_active !== false);
   const displayedTreasuries = showArchived ? treasuries : treasuries.filter(t => t.is_active !== false);
@@ -590,7 +598,7 @@ export default function SettingsPage() {
             <div className="bg-blue-50 border border-blue-200 p-3 rounded-2xl text-[11px] font-bold text-blue-900">
               سيظهر الاسم الجديد فوراً في الإنتاج وفي كل الصفحات.
             </div>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button onClick={confirmEditPathway} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs">حفظ</button>
               <button onClick={() => setEditingPathway(null)} className="bg-slate-100 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs">إلغاء</button>
             </div>
@@ -613,7 +621,7 @@ export default function SettingsPage() {
                 <p className="text-xs text-slate-600 font-medium mt-1">القيمة الافتراضية 1.0 — زدها لصنف مرتفع القيمة، أنقصها لصنف منخفض.</p>
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button onClick={confirmEditProduct} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs">حفظ</button>
               <button onClick={() => setEditingProduct(null)} className="bg-slate-100 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs">إلغاء</button>
             </div>
@@ -635,7 +643,7 @@ export default function SettingsPage() {
                 </select>
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button onClick={confirmEditTreasury} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs">حفظ</button>
               <button onClick={() => setEditingTreasury(null)} className="bg-slate-100 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs">إلغاء</button>
             </div>
@@ -652,7 +660,7 @@ export default function SettingsPage() {
               <div><label className="block text-slate-700 mb-1.5">الهاتف:</label><input type="text" value={editingCustomer.phone || ''} onChange={(e) => setEditingCustomer({ ...editingCustomer, phone: e.target.value })} className="w-full border-2 rounded-xl px-3 bg-slate-50 h-11 font-mono" /></div>
               <div><label className="block text-slate-700 mb-1.5">سقف الائتمان (ج):</label><input type="number" value={editingCustomer.credit_limit || 50000} onChange={(e) => setEditingCustomer({ ...editingCustomer, credit_limit: e.target.value })} className="w-full border-2 rounded-xl px-3 bg-slate-50 h-11 font-mono" /></div>
             </div>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button onClick={confirmEditCustomer} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs">حفظ</button>
               <button onClick={() => setEditingCustomer(null)} className="bg-slate-100 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs">إلغاء</button>
             </div>
@@ -668,7 +676,7 @@ export default function SettingsPage() {
               <div><label className="block text-slate-700 mb-1.5">الاسم:</label><input type="text" value={editingSupplier.name} onChange={(e) => setEditingSupplier({ ...editingSupplier, name: e.target.value })} className="w-full border-2 rounded-xl px-3 bg-slate-50 h-11" /></div>
               <div><label className="block text-slate-700 mb-1.5">الهاتف:</label><input type="text" value={editingSupplier.phone || ''} onChange={(e) => setEditingSupplier({ ...editingSupplier, phone: e.target.value })} className="w-full border-2 rounded-xl px-3 bg-slate-50 h-11 font-mono" /></div>
             </div>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button onClick={confirmEditSupplier} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs">حفظ</button>
               <button onClick={() => setEditingSupplier(null)} className="bg-slate-100 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs">إلغاء</button>
             </div>
@@ -689,7 +697,7 @@ export default function SettingsPage() {
                 <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl text-xs font-bold text-slate-700">
                   مستخدم في {deleteModal.usage.total} حركة. سيتم الأرشفة (لا يمكن الحذف النهائي حفاظاً على الأثر المحاسبي).
                 </div>
-                <div className="flex gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   <button onClick={deleteModal.type === 'product' ? confirmDeleteProduct : deleteModal.type === 'pathway' ? confirmDeletePathway : deleteModal.type === 'treasury' ? confirmDeleteTreasury : deleteModal.type === 'customer' ? confirmDeleteCustomer : confirmDeleteSupplier} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs">أرشفة الآن</button>
                   <button onClick={() => setDeleteModal(null)} className="bg-slate-100 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs">إلغاء</button>
                 </div>
@@ -697,7 +705,7 @@ export default function SettingsPage() {
             ) : (
               <>
                 <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl text-xs font-bold text-slate-700">لا استخدام سابق. سيتم الحذف النهائي.</div>
-                <div className="flex gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   <button onClick={deleteModal.type === 'product' ? confirmDeleteProduct : deleteModal.type === 'pathway' ? confirmDeletePathway : deleteModal.type === 'treasury' ? confirmDeleteTreasury : deleteModal.type === 'customer' ? confirmDeleteCustomer : confirmDeleteSupplier} className="flex-1 bg-rose-600 text-white font-bold py-2.5 rounded-xl text-xs">حذف نهائي</button>
                   <button onClick={() => setDeleteModal(null)} className="bg-slate-100 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs">إلغاء</button>
                 </div>
@@ -736,6 +744,8 @@ export default function SettingsPage() {
               </div>
               <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-2.5 rounded-xl text-xs">إدراج الصنف</button>
             </form>
+
+
             <div className="overflow-x-auto border rounded-2xl">
               <table className="w-full text-right text-xs">
                 <thead className="bg-slate-800 text-white font-bold"><tr><th className="p-3">الكود</th><th className="p-3">الاسم</th><th className="p-3">طريقة التسعير</th><th className="p-3">المعامل</th><th className="p-3 text-center">معامل التوزيع</th><th className="p-3 text-center">إجراءات</th></tr></thead>
@@ -758,7 +768,6 @@ export default function SettingsPage() {
                             </div>
                           ) : (
                             <button onClick={() => reactivateProduct(p.product_code)} className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 mx-auto"><RefreshCw className="w-3 h-3" /><span>استعادة</span></button>
-                          )}
                         </td>
                       </tr>
                     );
@@ -789,12 +798,15 @@ export default function SettingsPage() {
                       <option value="عهدة">عهدة</option>
                     </select>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-2.5 rounded-xl text-xs h-11">حفظ</button>
                     <button type="button" onClick={() => setShowNewTreasuryForm(false)} className="bg-slate-200 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs h-11">إلغاء</button>
                   </div>
                 </div>
               </form>
+            )}
+
+
             )}
             <div className="overflow-x-auto border rounded-2xl">
               <table className="w-full text-right text-xs">
@@ -818,7 +830,6 @@ export default function SettingsPage() {
                             </div>
                           ) : (
                             <button onClick={() => reactivateTreasury(t.treasury_code)} className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 mx-auto"><RefreshCw className="w-3 h-3" /><span>استعادة</span></button>
-                          )}
                         </td>
                       </tr>
                     );
@@ -856,7 +867,6 @@ export default function SettingsPage() {
                             </div>
                           ) : (
                             <button onClick={() => reactivateSupplier(s.id)} className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 mx-auto"><RefreshCw className="w-3 h-3" /><span>استعادة</span></button>
-                          )}
                         </td>
                       </tr>
                     );
@@ -895,7 +905,6 @@ export default function SettingsPage() {
                             </div>
                           ) : (
                             <button onClick={() => reactivateCustomer(c.id)} className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 mx-auto"><RefreshCw className="w-3 h-3" /><span>استعادة</span></button>
-                          )}
                         </td>
                       </tr>
                     );
@@ -920,6 +929,7 @@ export default function SettingsPage() {
                   <button type="button" onClick={() => setShowNewPathwayForm(false)} className="bg-slate-200 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs h-11">إلغاء</button>
                 </div>
               </form>
+
             )}
             <div className="space-y-3">
               {displayedPathways.length === 0 && <p className="text-center text-slate-400 py-6 font-sans">لا توجد مسارات</p>}
@@ -944,7 +954,6 @@ export default function SettingsPage() {
                           </div>
                         ) : (
                           <button onClick={(e) => { e.stopPropagation(); reactivatePathway(pw.pathway_code); }} className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1"><RefreshCw className="w-3 h-3" /><span>استعادة</span></button>
-                        )}
                       </div>
                     </div>
                     {isExpanded && active && (
@@ -958,20 +967,17 @@ export default function SettingsPage() {
                               </div>
                             ))}
                           </div>
-                        )}
                         {addingToPathway === pw.pathway_code ? (
                           <div className="bg-slate-50 p-4 rounded-xl border-2 border-slate-200 space-y-3">
                             <div className="grid grid-cols-2 gap-3">
                               <div><label className="block text-xs font-bold text-slate-700 mb-1">الصنف:</label><select value={selectedProductToAdd} onChange={(e) => setSelectedProductToAdd(e.target.value)} className="w-full border rounded-xl px-3 bg-white h-10 text-xs font-bold"><option value="">— اختر —</option>{available.map(p => (<option key={p.product_code} value={p.product_code}>{p.product_name_ar}</option>))}</select></div>
                               <div><label className="block text-xs font-bold text-slate-700 mb-1">النسبة (%):</label><input type="number" step="0.5" value={ratioToAdd} onChange={(e) => setRatioToAdd(e.target.value)} className="w-full border rounded-xl px-3 bg-white h-10 text-xs font-bold font-mono" /></div>
                             </div>
-                            <div className="flex gap-2"><button onClick={() => handleAddProductToPathway(pw.pathway_code)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2 rounded-lg text-xs">إضافة</button><button onClick={() => { setAddingToPathway(null); setSelectedProductToAdd(''); }} className="bg-slate-200 text-slate-700 font-bold px-4 py-2 rounded-lg text-xs">إلغاء</button></div>
+                            <div className="grid grid-cols-3 gap-2"><button onClick={() => handleAddProductToPathway(pw.pathway_code)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2 rounded-lg text-xs">إضافة</button><button onClick={() => { setAddingToPathway(null); setSelectedProductToAdd(''); }} className="bg-slate-200 text-slate-700 font-bold px-4 py-2 rounded-lg text-xs">إلغاء</button></div>
                           </div>
                         ) : (
                           <button onClick={() => { setAddingToPathway(pw.pathway_code); setSelectedProductToAdd(available[0]?.product_code || ''); }} disabled={available.length === 0} className="w-full py-2.5 bg-slate-50 text-slate-700 font-bold rounded-xl border border-dashed border-slate-300 text-xs disabled:opacity-50">{available.length === 0 ? 'كل الأصناف مُضافة' : '+ إضافة صنف للمسار'}</button>
-                        )}
                       </div>
-                    )}
                   </div>
                 );
               })}
@@ -1113,7 +1119,7 @@ export default function SettingsPage() {
               <button onClick={() => setOpeningSubTab('inventory')} className={`flex-1 min-w-[140px] py-3 rounded-xl text-xs font-black flex items-center justify-center gap-2 ${openingSubTab === 'inventory' ? 'bg-white text-slate-900 shadow' : 'text-slate-600'}`}><Boxes className="w-4 h-4" /><span>بضاعة الثلاجة</span></button>
             </div>
 
-            <div className="space-y-5">
+            <form onSubmit={(e) => { e.preventDefault(); handleSaveSubTab(); }} className="space-y-5">
               {openingSubTab === 'treasuries' && (
                 <div className="bg-slate-50 p-5 rounded-3xl border space-y-3">
                   <div className="flex justify-between items-center border-b pb-2">
@@ -1125,30 +1131,22 @@ export default function SettingsPage() {
                       <button type="button" onClick={() => { setShowNewTreasuryForm(true); setActiveTab('treasuries'); }} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1">
                         <Plus className="w-3.5 h-3.5" /><span>إنشاء خزينة</span>
                       </button>
-                    )}
                   </div>
                   {openTreasuries.length === 0 && <p className="text-xs text-slate-400 text-center py-3 font-bold">لا توجد خزائن بعد</p>}
-                  {openTreasuries.map((t, idx) => {
-                    const hasValue = Number(t.balance) > 0;
-                    return (
-                      <div key={t.code} className={'p-4 rounded-2xl border-2 transition flex flex-wrap gap-3 items-center ' + (hasValue ? 'bg-emerald-50/60 border-emerald-300' : 'bg-white border-slate-200')}>
-                        <div className="flex-1 min-w-[200px]">
-                          <div className="flex items-center gap-2 mb-1">
-                            {t.type === 'حساب بنكي' ? <Building2 className={'w-4 h-4 ' + (hasValue ? 'text-emerald-700' : 'text-slate-700')} /> : t.type === 'عهدة' ? <UserCheck className={'w-4 h-4 ' + (hasValue ? 'text-emerald-700' : 'text-slate-700')} /> : <Wallet className={'w-4 h-4 ' + (hasValue ? 'text-emerald-700' : 'text-slate-700')} />}
-                            <span className={'text-sm font-bold ' + (hasValue ? 'text-emerald-800' : 'text-slate-800')}>{t.name}</span>
-                            <span className="text-[10px] text-slate-400 font-mono">{t.code}</span>
-                          </div>
-                          <span className={'text-[11px] font-bold ' + (hasValue ? 'text-emerald-600' : 'text-slate-500')}>{t.type}</span>
+                  {openTreasuries.map((t, idx) => (
+                    <div key={t.code} className="bg-white p-4 rounded-2xl border flex flex-wrap gap-3 items-center">
+                      <div className="flex-1 min-w-[200px]">
+                        <div className="flex items-center gap-2 mb-1">
+                          {t.type === 'حساب بنكي' ? <Building2 className="w-4 h-4 text-slate-700" /> : t.type === 'عهدة' ? <UserCheck className="w-4 h-4 text-slate-700" /> : <Wallet className="w-4 h-4 text-slate-700" />}
+                          <span className="text-sm font-bold text-slate-800">{t.name}</span>
+                          <span className="text-[10px] text-slate-400 font-mono">{t.code}</span>
                         </div>
-                        <div>
-                          <label className={'block text-[10px] font-bold mb-0.5 ' + (hasValue ? 'text-emerald-700' : 'text-slate-500')}>الرصيد الافتتاحي (ج)</label>
-                          <input type="number" step="0.01" value={t.balance} disabled={openingLocked} onChange={(e) => { const u = [...openTreasuries]; u[idx].balance = Number(e.target.value); setOpenTreasuries(u); }} placeholder="0" className={'w-40 border-2 rounded-xl px-3 text-sm font-bold font-mono h-11 ' + (hasValue ? 'border-emerald-300 bg-white text-emerald-900' : 'border-slate-300 disabled:bg-slate-100')} />
-                        </div>
+                        <span className="text-[11px] text-slate-500 font-bold">{t.type}</span>
                       </div>
-                    );
-                  })}
+                      <input type="number" step="0.01" value={t.balance} disabled={openingLocked} onChange={(e) => { const u = [...openTreasuries]; u[idx].balance = Number(e.target.value); setOpenTreasuries(u); }} placeholder="الرصيد (ج)" className="w-40 border-2 border-slate-300 rounded-xl px-3 text-sm font-bold font-mono h-11 disabled:bg-slate-100" />
+                    </div>
+                  ))}
                 </div>
-              )}
 
               {openingSubTab === 'customers' && (
                 <div className="bg-slate-50 p-5 rounded-3xl border space-y-3">
@@ -1159,34 +1157,16 @@ export default function SettingsPage() {
                     </div>
                     {!openingLocked && (
                       <button type="button" onClick={() => setOpenCustomers([...openCustomers, { name: '', phone: '', balance: 0 }])} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1"><Plus className="w-3.5 h-3.5" /><span>عميل</span></button>
-                    )}
                   </div>
-                  {openCustomers.map((c, idx) => {
-                    const hasValue = Number(c.balance) > 0;
-                    return (
-                      <div key={idx} className={'p-3 rounded-2xl border-2 transition space-y-2 ' + (hasValue ? 'bg-emerald-50/60 border-emerald-300' : 'bg-white border-slate-200')}>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
-                          <div>
-                            <label className={'block text-[10px] font-bold mb-0.5 ' + (hasValue ? 'text-emerald-700' : 'text-slate-500')}>اسم العميل</label>
-                            <input type="text" value={c.name} disabled={openingLocked} onChange={(e) => { const u = [...openCustomers]; u[idx].name = e.target.value; setOpenCustomers(u); }} placeholder="اسم العميل" className={'w-full border rounded-xl px-3 text-xs font-bold h-10 ' + (hasValue ? 'border-emerald-300 bg-white text-emerald-900' : 'border-slate-200 disabled:bg-slate-100')} />
-                          </div>
-                          <div>
-                            <label className={'block text-[10px] font-bold mb-0.5 ' + (hasValue ? 'text-emerald-700' : 'text-slate-500')}>الهاتف</label>
-                            <input type="text" value={c.phone} disabled={openingLocked} onChange={(e) => { const u = [...openCustomers]; u[idx].phone = e.target.value; setOpenCustomers(u); }} placeholder="الهاتف" className={'w-full border rounded-xl px-3 text-xs font-bold h-10 ' + (hasValue ? 'border-emerald-300 bg-white text-emerald-900' : 'border-slate-200 disabled:bg-slate-100')} />
-                          </div>
-                          <div className="flex gap-2 items-end">
-                            <div className="flex-1">
-                              <label className={'block text-[10px] font-bold mb-0.5 ' + (hasValue ? 'text-emerald-700' : 'text-slate-500')}>المديونية الافتتاحية (ج)</label>
-                              <input type="number" value={c.balance} disabled={openingLocked} onChange={(e) => { const u = [...openCustomers]; u[idx].balance = Number(e.target.value); setOpenCustomers(u); }} placeholder="0" className={'w-full border-2 rounded-xl px-3 text-xs font-bold font-mono h-10 ' + (hasValue ? 'border-emerald-300 bg-white text-emerald-900' : 'border-slate-300 disabled:bg-slate-100')} />
-                            </div>
-                            {!openingLocked && openCustomers.length > 1 && <button type="button" onClick={() => setOpenCustomers(openCustomers.filter((_, i) => i !== idx))} className="text-rose-600 p-2 hover:bg-rose-50 rounded-lg mb-1"><Trash2 className="w-4 h-4" /></button>}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {openCustomers.map((c, idx) => (
+                    <div key={idx} className="flex flex-wrap gap-2 items-center bg-white p-2.5 rounded-2xl border">
+                      <input type="text" value={c.name} disabled={openingLocked} onChange={(e) => { const u = [...openCustomers]; u[idx].name = e.target.value; setOpenCustomers(u); }} placeholder="اسم العميل" className="flex-1 min-w-[150px] border rounded-xl px-3 text-xs font-bold h-10 disabled:bg-slate-100" />
+                      <input type="text" value={c.phone} disabled={openingLocked} onChange={(e) => { const u = [...openCustomers]; u[idx].phone = e.target.value; setOpenCustomers(u); }} placeholder="الهاتف" className="w-36 border rounded-xl px-3 text-xs font-bold h-10 disabled:bg-slate-100" />
+                      <input type="number" value={c.balance} disabled={openingLocked} onChange={(e) => { const u = [...openCustomers]; u[idx].balance = Number(e.target.value); setOpenCustomers(u); }} placeholder="المديونية" className="w-36 border-2 border-slate-300 rounded-xl px-3 text-xs font-bold font-mono h-10 disabled:bg-slate-100" />
+                      {!openingLocked && openCustomers.length > 1 && <button type="button" onClick={() => setOpenCustomers(openCustomers.filter((_, i) => i !== idx))} className="text-rose-600 p-2"><Trash2 className="w-4 h-4" /></button>}
+                    </div>
+                  ))}
                 </div>
-              )}
 
               {openingSubTab === 'suppliers' && (
                 <div className="bg-slate-50 p-5 rounded-3xl border space-y-3">
@@ -1197,34 +1177,16 @@ export default function SettingsPage() {
                     </div>
                     {!openingLocked && (
                       <button type="button" onClick={() => setOpenSuppliers([...openSuppliers, { name: '', phone: '', balance: 0 }])} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1"><Plus className="w-3.5 h-3.5" /><span>مورد</span></button>
-                    )}
                   </div>
-                  {openSuppliers.map((s, idx) => {
-                    const hasValue = Number(s.balance) > 0;
-                    return (
-                      <div key={idx} className={'p-3 rounded-2xl border-2 transition space-y-2 ' + (hasValue ? 'bg-emerald-50/60 border-emerald-300' : 'bg-white border-slate-200')}>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
-                          <div>
-                            <label className={'block text-[10px] font-bold mb-0.5 ' + (hasValue ? 'text-emerald-700' : 'text-slate-500')}>اسم المورد</label>
-                            <input type="text" value={s.name} disabled={openingLocked} onChange={(e) => { const u = [...openSuppliers]; u[idx].name = e.target.value; setOpenSuppliers(u); }} placeholder="اسم المورد" className={'w-full border rounded-xl px-3 text-xs font-bold h-10 ' + (hasValue ? 'border-emerald-300 bg-white text-emerald-900' : 'border-slate-200 disabled:bg-slate-100')} />
-                          </div>
-                          <div>
-                            <label className={'block text-[10px] font-bold mb-0.5 ' + (hasValue ? 'text-emerald-700' : 'text-slate-500')}>الهاتف</label>
-                            <input type="text" value={s.phone} disabled={openingLocked} onChange={(e) => { const u = [...openSuppliers]; u[idx].phone = e.target.value; setOpenSuppliers(u); }} placeholder="الهاتف" className={'w-full border rounded-xl px-3 text-xs font-bold h-10 ' + (hasValue ? 'border-emerald-300 bg-white text-emerald-900' : 'border-slate-200 disabled:bg-slate-100')} />
-                          </div>
-                          <div className="flex gap-2 items-end">
-                            <div className="flex-1">
-                              <label className={'block text-[10px] font-bold mb-0.5 ' + (hasValue ? 'text-emerald-700' : 'text-slate-500')}>المستحق الافتتاحي (ج)</label>
-                              <input type="number" value={s.balance} disabled={openingLocked} onChange={(e) => { const u = [...openSuppliers]; u[idx].balance = Number(e.target.value); setOpenSuppliers(u); }} placeholder="0" className={'w-full border-2 rounded-xl px-3 text-xs font-bold font-mono h-10 ' + (hasValue ? 'border-emerald-300 bg-white text-emerald-900' : 'border-slate-300 disabled:bg-slate-100')} />
-                            </div>
-                            {!openingLocked && openSuppliers.length > 1 && <button type="button" onClick={() => setOpenSuppliers(openSuppliers.filter((_, i) => i !== idx))} className="text-rose-600 p-2 hover:bg-rose-50 rounded-lg mb-1"><Trash2 className="w-4 h-4" /></button>}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {openSuppliers.map((s, idx) => (
+                    <div key={idx} className="flex flex-wrap gap-2 items-center bg-white p-2.5 rounded-2xl border">
+                      <input type="text" value={s.name} disabled={openingLocked} onChange={(e) => { const u = [...openSuppliers]; u[idx].name = e.target.value; setOpenSuppliers(u); }} placeholder="اسم المورد" className="flex-1 min-w-[150px] border rounded-xl px-3 text-xs font-bold h-10 disabled:bg-slate-100" />
+                      <input type="text" value={s.phone} disabled={openingLocked} onChange={(e) => { const u = [...openSuppliers]; u[idx].phone = e.target.value; setOpenSuppliers(u); }} placeholder="الهاتف" className="w-36 border rounded-xl px-3 text-xs font-bold h-10 disabled:bg-slate-100" />
+                      <input type="number" value={s.balance} disabled={openingLocked} onChange={(e) => { const u = [...openSuppliers]; u[idx].balance = Number(e.target.value); setOpenSuppliers(u); }} placeholder="المستحق" className="w-36 border-2 border-slate-300 rounded-xl px-3 text-xs font-bold font-mono h-10 disabled:bg-slate-100" />
+                      {!openingLocked && openSuppliers.length > 1 && <button type="button" onClick={() => setOpenSuppliers(openSuppliers.filter((_, i) => i !== idx))} className="text-rose-600 p-2"><Trash2 className="w-4 h-4" /></button>}
+                    </div>
+                  ))}
                 </div>
-              )}
 
               {openingSubTab === 'inventory' && (
                 <div className="bg-slate-50 p-5 rounded-3xl border space-y-3">
@@ -1237,45 +1199,45 @@ export default function SettingsPage() {
                       <button type="button" onClick={() => setActiveTab('products')} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1">
                         <Plus className="w-3.5 h-3.5" /><span>إنشاء صنف</span>
                       </button>
-                    )}
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                    {openStock.map((st, idx) => {
-                      const hasValue = Number(st.weight) > 0;
-                      return (
-                        <div key={st.code} className={'p-3 rounded-2xl border-2 space-y-2 transition ' + (hasValue ? 'bg-emerald-50/60 border-emerald-300' : 'bg-white border-slate-200')}>
-                          <span className={'text-xs font-bold block ' + (hasValue ? 'text-emerald-800' : 'text-slate-700')}>{st.name}:</span>
-                          <div className="grid grid-cols-3 gap-2">
-                            <div>
-                              <label className={'block text-[10px] font-bold mb-0.5 ' + (hasValue ? 'text-emerald-700' : 'text-slate-500')}>الكمية (كجم)</label>
-                              <input type="number" step="0.1" value={st.weight} disabled={openingLocked} onChange={(e) => { const u = [...openStock]; u[idx].weight = Number(e.target.value); setOpenStock(u); }} placeholder="0" className={'w-full border rounded-lg px-2 h-9 text-xs font-mono ' + (hasValue ? 'border-emerald-300 bg-white font-bold text-emerald-900' : 'border-slate-200 disabled:bg-slate-100')} />
-                            </div>
-                            <div>
-                              <label className={'block text-[10px] font-bold mb-0.5 ' + (hasValue ? 'text-emerald-700' : 'text-slate-500')}>تكلفة/كجم (ج)</label>
-                              <input type="number" value={st.cost} disabled={openingLocked} onChange={(e) => { const u = [...openStock]; u[idx].cost = Number(e.target.value); setOpenStock(u); }} placeholder="0" className={'w-full border rounded-lg px-2 h-9 text-xs font-mono ' + (hasValue ? 'border-emerald-300 bg-white font-bold text-emerald-900' : 'border-slate-200 disabled:bg-slate-100')} />
-                            </div>
-                            <div>
-                              <label className={'block text-[10px] font-bold mb-0.5 ' + (hasValue ? 'text-emerald-700' : 'text-slate-500')}>القيمة (ج)</label>
-                              <div className={'w-full border rounded-lg px-2 h-9 text-xs font-mono flex items-center justify-center ' + (hasValue ? 'border-emerald-300 bg-emerald-100 text-emerald-900 font-bold' : 'border-slate-200 bg-slate-50 text-slate-400')}>
-                                {(Number(st.weight) * Number(st.cost)).toLocaleString()}
-                              </div>
-                            </div>
+                    {openStock.map((st, idx) => (
+                      <div key={st.code} className="bg-white p-3 rounded-2xl border space-y-1">
+                        <span className="text-xs font-bold text-slate-700 block">{st.name}:</span>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-bold text-slate-600">الكمية (كجم):</label>
+                            <input type="number" step="0.1" value={st.weight} disabled={openingLocked} onChange={(e) => { const u = [...openStock]; u[idx].weight = Number(e.target.value); setOpenStock(u); }} placeholder="0" className="w-full border rounded-lg px-2 h-9 text-xs font-mono disabled:bg-slate-100" />
                           </div>
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-bold text-slate-600">تكلفة/كجم (ج):</label>
+                            <input type="number" value={st.cost} disabled={openingLocked} onChange={(e) => { const u = [...openStock]; u[idx].cost = Number(e.target.value); setOpenStock(u); }} placeholder="0" className="w-full border rounded-lg px-2 h-9 text-xs font-mono disabled:bg-slate-100" />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-bold text-emerald-700">القيمة:</label>
+                            <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-2 h-9 flex items-center justify-center text-xs font-mono font-bold text-emerald-800">{(Number(st.weight) * Number(st.cost)).toLocaleString()} ج</div>
+                          </div>
+                          <input type="number" value={st.cost} disabled={openingLocked} onChange={(e) => { const u = [...openStock]; u[idx].cost = Number(e.target.value); setOpenStock(u); }} placeholder="التكلفة" className="w-1/2 border rounded-lg px-2 h-9 text-xs font-mono disabled:bg-slate-100" />
                         </div>
-                      );
-                    })}
+                      </div>
+                    ))}
                   </div>
                 </div>
-              )}
 
               {!openingLocked && (
                 <div className="flex gap-3 items-center">
-                  <button type="button" onClick={handleSaveCurrentTab} className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold px-4 py-3 rounded-2xl text-xs">حفظ التبويب الحالي</button>
-                  <button type="button" onClick={handleSaveAll} className="bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold px-4 py-3 rounded-2xl text-xs">حفظ الكل</button>
-                  <button type="button" onClick={() => setShowLockConfirm(true)} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-xl text-sm">اعتماد وقفل الأرصدة الافتتاحية</button>
+                  <button type="button" onClick={handleSaveCurrentTab} className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold px-4 py-3 rounded-2xl text-xs">
+                    حفظ التبويب الحالي
+                  </button>
+                  <button type="button" onClick={handleSaveAll} className="bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold px-4 py-3 rounded-2xl text-xs">
+                    حفظ الكل
+                  </button>
+                  <button type="button" onClick={() => setShowLockConfirm(true)} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-xl text-sm">
+                    اعتماد وقفل الأرصدة الافتتاحية
+                  </button>
                 </div>
-              )}
-            </div>
+            </form>
+
           </div>
         )}
 
@@ -1309,7 +1271,6 @@ export default function SettingsPage() {
                   <div className="p-4 pt-0 text-xs text-slate-600 leading-loose font-medium bg-slate-50 border-t">
                     {item.d}
                   </div>
-                )}
               </div>
             ))}
 
