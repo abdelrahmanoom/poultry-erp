@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import UsageWidget from '@/components/UsageWidget';
 import {
   Shield, Building2, Users, Package, LogOut, Plus, X,
   AlertTriangle, RefreshCw, Pencil, Trash2, FlaskConical,
@@ -275,6 +276,8 @@ export default function MasterDashboardPage() {
             <p className="text-3xl font-black font-mono text-slate-900">{tenants.reduce((s, t) => s + (t.products_count || 0), 0)}</p>
           </div>
         </div>
+
+        <UsageWidget />
 
         {sandbox && (
           <div className="bg-gradient-to-br from-amber-50 to-amber-100 border-2 border-amber-300 rounded-3xl p-6 space-y-4">
