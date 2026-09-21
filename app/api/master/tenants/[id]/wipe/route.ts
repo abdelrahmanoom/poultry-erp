@@ -24,7 +24,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   const tenantId = Number(id);
   if (!tenantId || isNaN(tenantId)) return NextResponse.json({ error: 'رقم غير صحيح' }, { status: 400 });
-  if (tenantId === 1) return NextResponse.json({ error: 'لا يمكن مسح حساب المالك' }, { status: 403 });
+  // فحص الحماية الديناميكية
+  const { data: tenant } = await supabaseAdmin
+    .from('tenants')
+    .select('is_protected, name')
+    .eq('id', tenantId)
+    .maybeSingle();
+
+  if (!tenant) {
+    return NextResponse.json({ error: 'النشاط غير موجود' }, { status: 404 });
+  }
+
+  if (tenant.is_protected) {
+    return NextResponse.json({
+      error: 'النشاط محمي — أزل الحماية أولاً',
+      isProtected: true,
+    }, { status: 403 });
+  }
 
   const errors: any[] = [];
   for (const table of TABLES) {
