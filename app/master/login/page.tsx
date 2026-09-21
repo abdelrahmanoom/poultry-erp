@@ -80,7 +80,7 @@ export default function MasterLoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full border-2 border-slate-200 rounded-xl pr-10 pl-3 h-12 text-sm font-bold outline-none focus:border-slate-900"
-                placeholder="••••••••"
+                placeholder="كلمة المرور"
                 required
               />
             </div>

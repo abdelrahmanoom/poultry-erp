@@ -19,6 +19,8 @@ export interface TenantUser {
   permissions: any;
   tenant_id: number;
   tenant_name?: string;
+  tenant_slug?: string;
+  is_read_only?: boolean;
 }
 
 /**
@@ -26,12 +28,35 @@ export interface TenantUser {
  * - يبحث عن المستخدم في كل الـ tenants
  * - يدعم bcrypt وكلمات المرور القديمة (نص واضح) مؤقتاً
  */
-export async function tenantLogin(username: string, password: string) {
-  const { data: users, error } = await supabase
+export async function tenantLogin(username: string, password: string, slug?: string) {
+  let tenantFilterId: number | null = null;
+
+  // إذا أُرسل slug → حدد النشاط أولاً
+  if (slug && slug.trim()) {
+    const { data: tenant } = await supabase
+      .from('tenants')
+      .select('id, name, is_active')
+      .eq('slug', slug.trim().toLowerCase())
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (!tenant) {
+      return { success: false, error: 'النشاط غير موجود أو غير مفعّل' };
+    }
+    tenantFilterId = tenant.id;
+  }
+
+  let query = supabase
     .from('system_users')
     .select('*')
     .eq('username', username.trim())
     .eq('is_active', true);
+
+  if (tenantFilterId !== null) {
+    query = query.eq('tenant_id', tenantFilterId);
+  }
+
+  const { data: users, error } = await query;
 
   if (error || !users || users.length === 0) {
     return { success: false, error: 'اسم المستخدم أو كلمة المرور غير صحيحة' };
@@ -66,7 +91,7 @@ export async function tenantLogin(username: string, password: string) {
   // جلب اسم الـ tenant
   const { data: tenant } = await supabase
     .from('tenants')
-    .select('id, name')
+    .select('id, name, slug, is_read_only')
     .eq('id', matchedUser.tenant_id)
     .eq('is_active', true)
     .maybeSingle();
@@ -100,6 +125,8 @@ export async function tenantLogin(username: string, password: string) {
       permissions: matchedUser.permissions,
       tenant_id: matchedUser.tenant_id,
       tenant_name: tenant.name,
+      tenant_slug: tenant.slug,
+      is_read_only: tenant.is_read_only || false,
     } as TenantUser,
   };
 }
@@ -114,12 +141,20 @@ export async function getCurrentTenantUser(): Promise<TenantUser | null> {
 
   const { data: session } = await supabase
     .from('tenant_sessions')
-    .select('user_id, tenant_id, expires_at')
+    .select('user_id, tenant_id, expires_at, last_activity')
     .eq('token', token)
     .gt('expires_at', new Date().toISOString())
     .maybeSingle();
 
   if (!session) return null;
+
+  // فحص الخمول — 30 دقيقة
+  const IDLE_LIMIT_MS = 30 * 60 * 1000;
+  const lastActivity = session.last_activity ? new Date(session.last_activity).getTime() : Date.now();
+  if (Date.now() - lastActivity > IDLE_LIMIT_MS) {
+    await supabase.from('tenant_sessions').delete().eq('token', token);
+    return null;
+  }
 
   const { data: user } = await supabase
     .from('system_users')
@@ -132,7 +167,7 @@ export async function getCurrentTenantUser(): Promise<TenantUser | null> {
 
   const { data: tenant } = await supabase
     .from('tenants')
-    .select('name')
+    .select('name, slug, is_read_only')
     .eq('id', user.tenant_id)
     .maybeSingle();
 
@@ -142,6 +177,8 @@ export async function getCurrentTenantUser(): Promise<TenantUser | null> {
   return {
     ...user,
     tenant_name: tenant?.name,
+    tenant_slug: tenant?.slug,
+    is_read_only: tenant?.is_read_only || false,
   } as TenantUser;
 }
 

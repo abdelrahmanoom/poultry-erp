@@ -77,12 +77,20 @@ export async function getCurrentMaster(): Promise<MasterUser | null> {
 
   const { data: session } = await supabase
     .from('master_sessions')
-    .select('master_id, expires_at')
+    .select('master_id, expires_at, last_activity')
     .eq('token', token)
     .gt('expires_at', new Date().toISOString())
     .maybeSingle();
 
   if (!session) return null;
+
+  // فحص الخمول — 30 دقيقة
+  const IDLE_LIMIT_MS = 30 * 60 * 1000;
+  const lastActivity = session.last_activity ? new Date(session.last_activity).getTime() : Date.now();
+  if (Date.now() - lastActivity > IDLE_LIMIT_MS) {
+    await supabase.from('master_sessions').delete().eq('token', token);
+    return null;
+  }
 
   const { data: user } = await supabase
     .from('master_users')
