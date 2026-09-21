@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import {
   Shield, Building2, Users, Package, LogOut, Plus, X,
   AlertTriangle, RefreshCw, Pencil, Trash2, FlaskConical,
-  KeyRound, EyeOff, Eye, Lock, Unlock, Shield
+  KeyRound, EyeOff, Eye, Lock, Unlock
 } from 'lucide-react';
 
 interface Tenant {

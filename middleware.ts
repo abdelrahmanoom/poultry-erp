@@ -13,31 +13,46 @@ export function middleware(request: NextRequest) {
     /\.(ico|png|jpg|jpeg|svg|gif|webp|css|js|woff2?)$/.test(pathname)
   ) return NextResponse.next();
 
-  // 2. Master
+  // 2. Master — لا يتأثر بالجلسة
   if (pathname === '/master' || pathname.startsWith('/master/')) return NextResponse.next();
 
-  // 3. الصفحة الجذرية
+  // 3. قراءة الجلسة
+  const hasToken = !!request.cookies.get('tenant_token')?.value;
+  const slug = request.cookies.get('tenant_slug')?.value;
+
+  // 4. الصفحة الجذرية
   if (pathname === '/') {
-    const slug = request.cookies.get('tenant_slug')?.value;
     return NextResponse.redirect(
-      new URL(slug ? '/' + slug + '/dashboard' : '/login', request.url)
+      new URL(hasToken && slug ? '/' + slug + '/dashboard' : '/login', request.url)
     );
   }
 
-  // 4. /login العام
-  if (pathname === '/login') return NextResponse.next();
+  // 5. /login — إذا مسجّل → redirect للـ dashboard
+  if (pathname === '/login') {
+    if (hasToken && slug) {
+      return NextResponse.redirect(new URL('/' + slug + '/dashboard', request.url));
+    }
+    return NextResponse.next();
+  }
 
-  // 5. /[slug]/login — يمر بلا تغيير
-  if (/^\/[a-z0-9-]+\/login$/.test(pathname)) return NextResponse.next();
+  // 6. /[slug]/login — إذا مسجّل بنفس الـ slug → redirect
+  const slugLoginMatch = pathname.match(/^\/([a-z0-9-]+)\/login$/);
+  if (slugLoginMatch) {
+    const urlSlug = slugLoginMatch[1];
+    if (hasToken && slug === urlSlug) {
+      return NextResponse.redirect(new URL('/' + urlSlug + '/dashboard', request.url));
+    }
+    return NextResponse.next();
+  }
 
-  // 6. مسار فيه slug بالفعل → مرّر
+  // 7. مسار فيه slug بالفعل → مرّر
   if (/^\/[a-z0-9-]+\/.+$/.test(pathname)) return NextResponse.next();
 
-  // 7. مسار بدون slug → **redirect** حسب cookie (URL يتغير)
-  const slug = request.cookies.get('tenant_slug')?.value;
-  if (!slug) return NextResponse.redirect(new URL('/login', request.url));
+  // 8. مسار بدون slug → redirect حسب cookie
+  if (!slug || !hasToken) {
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
 
-  // /sales → /[slug]/sales (URL يتغير في المتصفح)
   return NextResponse.redirect(new URL('/' + slug + pathname, request.url));
 }
 
