@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { Wallet, Building2, UserCheck, Plus, X, RefreshCw } from 'lucide-react';
+import { Wallet, Building2, UserCheck, Plus, X, RefreshCw, TrendingDown, TrendingUp, CheckCircle } from 'lucide-react';
 import DataTable from '@/components/DataTable';
+import Autocomplete from '@/components/Autocomplete';
 
 export default function TreasuryPage() {
   const supabase = createClient();
@@ -23,6 +24,21 @@ export default function TreasuryPage() {
   const [actualCash, setActualCash] = useState('');
   const [closeNotes, setCloseNotes] = useState('');
   const [closeTreasury, setCloseTreasury] = useState('');
+  const [showCashModal, setShowCashModal] = useState(false);
+  const [cashMovementType, setCashMovementType] = useState<'receipt' | 'payment'>('receipt');
+  const [cashEntityName, setCashEntityName] = useState('');
+  const [cashAmount, setCashAmount] = useState('');
+  const [cashTreasury, setCashTreasury] = useState('');
+  const [cashNotes, setCashNotes] = useState('');
+  const [customersList, setCustomersList] = useState<any[]>([]);
+  const [suppliersList, setSuppliersList] = useState<any[]>([]);
+  const [savingCash, setSavingCash] = useState(false);
+  const [showQuickRegister, setShowQuickRegister] = useState(false);
+  const [quickRegName, setQuickRegName] = useState('');
+  const [quickRegPhone, setQuickRegPhone] = useState('');
+  const [registeringNew, setRegisteringNew] = useState(false);
+  const [cashTouched, setCashTouched] = useState<Record<string, boolean>>({});
+  const [cashSubmitted, setCashSubmitted] = useState(false);
 
   const showToast = (msg: string, type = 'success') => {
     setToast({ msg, type });
@@ -56,8 +72,125 @@ export default function TreasuryPage() {
     }
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    loadCustomersSuppliers(); loadData(); }, []);
 
+  const loadCustomersSuppliers = async () => {
+    const { data: cust } = await supabase.from('customers').select('id, name, phone, balance').eq('is_active', true).order('name');
+    if (cust) setCustomersList(cust);
+    const { data: supp } = await supabase.from('suppliers').select('id, name, phone, balance').eq('is_active', true).order('name');
+    if (supp) setSuppliersList(supp);
+  };
+
+  const openCashModal = (type: 'receipt' | 'payment') => {
+    setCashMovementType(type);
+    setCashEntityName('');
+    setCashAmount('');
+    setCashNotes('');
+    setCashTreasury(selectedTreasury || (treasuries.length > 0 ? treasuries[0].treasury_code : ''));
+    setCashTouched({});
+    setCashSubmitted(false);
+    setShowCashModal(true);
+  };
+
+  const cashErrors = useMemo(() => {
+    const errs: any = {};
+    const amt = Number(cashAmount);
+    const entityList = cashMovementType === 'receipt' ? customersList : suppliersList;
+    const entity = entityList.find((x: any) => x.name === cashEntityName.trim());
+    const entityLabel = cashMovementType === 'receipt' ? 'العميل' : 'المورد';
+    const balanceLabel = cashMovementType === 'receipt' ? 'مديونية العميل' : 'مستحقات المورد';
+
+    if (!cashEntityName.trim()) errs.entity = 'اختر ' + entityLabel;
+    else if (!entity) errs.entity = entityLabel + ' غير مسجل في النظام';
+
+    if (!amt || amt <= 0) errs.amount = 'أدخل مبلغاً صحيحاً';
+    else if (entity) {
+      const bal = Number(entity.balance || 0);
+      if (amt > bal) errs.amount = 'المبلغ أكبر من ' + balanceLabel + ' (' + bal.toLocaleString() + ' ج)';
+    }
+
+    if (!cashTreasury) errs.treasury = 'اختر الخزينة';
+    else if (cashMovementType === 'payment') {
+      const tBal = Number(balances[cashTreasury] || 0);
+      if (tBal < amt) errs.treasury = 'رصيد الخزينة ' + tBal.toLocaleString() + ' ج — لا يكفي';
+    }
+
+    return errs;
+  }, [cashMovementType, cashEntityName, cashAmount, cashTreasury, customersList, suppliersList, balances]);
+  const handleCashMovement = async () => {
+    const amt = Number(cashAmount);
+    if (!amt || amt <= 0) { alert('أدخل مبلغاً صحيحاً'); return; }
+    if (!cashEntityName.trim()) { alert('اختر الطرف'); return; }
+    if (!cashTreasury) { alert('اختر الخزينة'); return; }
+
+    setSavingCash(true);
+    try {
+      const entityType = cashMovementType === 'receipt' ? 'customer' : 'supplier';
+
+      // 1. إيصال
+      const { error: vErr } = await supabase.from('financial_vouchers').insert([{
+        type: cashMovementType,
+        entity_name: cashEntityName.trim(),
+        amount: amt,
+        payment_method: 'cash',
+        treasury_code: cashTreasury,
+        notes: cashNotes.trim() || (cashMovementType === 'receipt' ? 'استلام نقدية' : 'دفع نقدية'),
+      }]);
+      if (vErr) throw vErr;
+
+      // 2. تحديث رصيد الطرف
+      if (entityType === 'customer') {
+        const cust = customersList.find((c: any) => c.name === cashEntityName.trim());
+        if (cust) {
+          const newBal = Math.max(0, Number(cust.balance || 0) - amt);
+          await supabase.from('customers').update({ balance: newBal }).eq('id', cust.id);
+        }
+      } else {
+        const supp = suppliersList.find((s: any) => s.name === cashEntityName.trim());
+        if (supp) {
+          const newBal = Math.max(0, Number(supp.balance || 0) - amt);
+          await supabase.from('suppliers').update({ balance: newBal }).eq('id', supp.id);
+        }
+      }
+
+      setShowCashModal(false);
+      setCashAmount('');
+      setCashNotes('');
+      setCashEntityName('');
+      await loadData();
+      await loadCustomersSuppliers();
+    } catch (err: any) {
+      alert('خطأ: ' + err.message);
+    } finally {
+      setSavingCash(false);
+    }
+  };
+  const handleQuickRegister = async () => {
+    if (!quickRegName.trim()) { alert('ادخل الاسم'); return; }
+    setRegisteringNew(true);
+    try {
+      const table = cashMovementType === 'receipt' ? 'customers' : 'suppliers';
+      const { error } = await supabase.from(table).insert([{
+        name: quickRegName.trim(),
+        phone: quickRegPhone.trim() || null,
+        balance: 0,
+        is_active: true,
+        tenant_id: 1,
+      }]);
+      if (error) throw error;
+
+      await loadCustomersSuppliers();
+      setCashEntityName(quickRegName.trim());
+      setShowQuickRegister(false);
+      setQuickRegName('');
+      setQuickRegPhone('');
+    } catch (err: any) {
+      alert('خطأ: ' + err.message);
+    } finally {
+      setRegisteringNew(false);
+    }
+  };
   const handleExpense = async (e: any) => {
     e.preventDefault();
     if (!amount || Number(amount) <= 0 || !selectedTreasury) {
@@ -454,6 +587,7 @@ export default function TreasuryPage() {
             <Wallet className="w-4 h-4" />
             <span>إقفال الوردية</span>
           </button>
+          <button onClick={() => openCashModal('receipt')} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow">             <TrendingDown className="w-4 h-4" />             <span>استلام نقدية</span>           </button>           <button onClick={() => openCashModal('payment')} className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow">             <TrendingUp className="w-4 h-4" />             <span>دفع نقدية</span>           </button>
           <button onClick={() => setShowExpenseModal(true)} className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow">
             <Plus className="w-4 h-4" />
             <span>مصروف نثري</span>
@@ -539,6 +673,143 @@ export default function TreasuryPage() {
           dateKey="created_at"
         />
       </div>
+
+      {showCashModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => !savingCash && setShowCashModal(false)}>
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b pb-3">
+              <div>
+                <h3 className="text-base font-black text-slate-800">
+                  {cashMovementType === 'receipt' ? 'استلام نقدية من عميل' : 'دفع نقدية لمورد'}
+                </h3>
+                <p className="text-xs text-slate-500 font-bold mt-0.5">
+                  {cashMovementType === 'receipt' ? 'يجب أن يكون العميل مسجلاً في النظام' : 'يجب أن يكون المورد مسجلاً في النظام'}
+                </p>
+              </div>
+              <button onClick={() => setShowCashModal(false)} disabled={savingCash} className="text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {/* حقل الطرف */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {cashMovementType === 'receipt' ? 'العميل *' : 'المورد *'}
+                </label>
+                <Autocomplete
+                  value={cashEntityName}
+                  onChange={(v: string) => { setCashEntityName(v); setCashTouched(prev => ({...prev, entity: true})); }}
+                  suggestions={(cashMovementType === 'receipt' ? customersList : suppliersList).map((x: any) => ({ id: x.id, label: x.name, sublabel: (x.phone || '') + (Number(x.balance) > 0 ? ' • ' + Number(x.balance).toLocaleString() + ' ج' : '') }))}
+                  placeholder={cashMovementType === 'receipt' ? 'اسم العميل' : 'اسم المورد'}
+                  className={'w-full border-2 rounded-xl px-3 h-11 text-sm font-bold ' + ((cashErrors.entity && (cashTouched.entity || cashSubmitted)) ? 'border-rose-400 bg-rose-50' : 'border-slate-200')}
+                />
+                {cashErrors.entity && (cashTouched.entity || cashSubmitted) && (
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-bold text-rose-600">⚠ {cashErrors.entity}</p>
+                    {cashEntityName.trim() && !cashErrors.entity.includes('اختر') && (
+                      <button onClick={() => { setQuickRegName(cashEntityName.trim()); setShowQuickRegister(true); }} className="text-[11px] font-bold text-blue-700 hover:text-blue-900 underline whitespace-nowrap">
+                        + سجّله الآن
+                      </button>
+                    )}
+                  </div>
+                )}
+                {!cashErrors.entity && cashEntityName.trim() && (() => {
+                  const entityList = cashMovementType === 'receipt' ? customersList : suppliersList;
+                  const e = entityList.find((x: any) => x.name === cashEntityName.trim());
+                  if (!e) return null;
+                  return (
+                    <p className="mt-1 text-[11px] font-bold text-emerald-700">
+                      ✓ مسجل — الرصيد: {Number(e.balance || 0).toLocaleString()} ج
+                    </p>
+                  );
+                })()}
+              </div>
+
+              {/* حقل المبلغ */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">المبلغ (ج) *</label>
+                <input type="number" step="0.01" value={cashAmount} onChange={(e) => { setCashAmount(e.target.value); setCashTouched(prev => ({...prev, amount: true})); }} placeholder="0.00" className={'w-full border-2 rounded-xl px-3 h-11 text-sm font-bold font-mono outline-none ' + ((cashErrors.amount && (cashTouched.amount || cashSubmitted)) ? 'border-rose-400 bg-rose-50' : 'border-slate-200')} />
+                {cashErrors.amount && (cashTouched.amount || cashSubmitted) && <p className="mt-1 text-[11px] font-bold text-rose-600">⚠ {cashErrors.amount}</p>}
+              </div>
+
+              {/* حقل الخزينة */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">الخزينة *</label>
+                <select value={cashTreasury} onChange={(e) => { setCashTreasury(e.target.value); setCashTouched(prev => ({...prev, treasury: true})); }} className={'w-full border-2 rounded-xl px-3 h-11 text-sm font-bold outline-none ' + ((cashErrors.treasury && (cashTouched.treasury || cashSubmitted)) ? 'border-rose-400 bg-rose-50' : 'border-slate-200')}>
+                  <option value="">— اختر الخزينة —</option>
+                  {treasuries.map((t: any) => (
+                    <option key={t.treasury_code} value={t.treasury_code}>
+                      {t.name_ar} ({(balances[t.treasury_code] || 0).toLocaleString()} ج)
+                    </option>
+                  ))}
+                </select>
+                {cashErrors.treasury && (cashTouched.treasury || cashSubmitted) && <p className="mt-1 text-[11px] font-bold text-rose-600">⚠ {cashErrors.treasury}</p>}
+              </div>
+
+              {/* ملاحظات */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">ملاحظات</label>
+                <input type="text" value={cashNotes} onChange={(e) => setCashNotes(e.target.value)} placeholder="اختياري" className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold outline-none" />
+              </div>
+            </div>
+
+            {/* أزرار */}
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={handleCashMovement}
+                disabled={savingCash || Object.keys(cashErrors).length > 0}
+                className={'flex-1 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl text-sm flex items-center justify-center gap-2 ' + (cashMovementType === 'receipt' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700')}
+              >
+                <CheckCircle className="w-4 h-4" />
+                <span>{savingCash ? 'جاري الحفظ...' : (cashMovementType === 'receipt' ? 'تأكيد الاستلام' : 'تأكيد الدفع')}</span>
+              </button>
+              <button onClick={() => setShowCashModal(false)} disabled={savingCash} className="bg-slate-100 text-slate-700 font-bold px-5 py-3 rounded-xl text-sm">
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showQuickRegister && (
+        <div className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => !registeringNew && setShowQuickRegister(false)}>
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b pb-3">
+              <div>
+                <h3 className="text-base font-black text-slate-800">
+                  تسجيل {cashMovementType === 'receipt' ? 'عميل' : 'مورد'} جديد
+                </h3>
+                <p className="text-xs text-slate-500 font-bold mt-0.5">أدخل البيانات — سيُسجَّل ويُختار تلقائياً</p>
+              </div>
+              <button onClick={() => setShowQuickRegister(false)} disabled={registeringNew} className="text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">الاسم *</label>
+                <input type="text" value={quickRegName} onChange={(e) => setQuickRegName(e.target.value)} className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold outline-none focus:border-blue-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">الهاتف <span className="text-slate-400 font-normal">(اختياري)</span></label>
+                <input type="text" value={quickRegPhone} onChange={(e) => setQuickRegPhone(e.target.value)} placeholder="01xxxxxxxxx" className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold font-mono outline-none focus:border-blue-500" />
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button onClick={handleQuickRegister} disabled={registeringNew || !quickRegName.trim()} className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold py-3 rounded-xl text-sm flex items-center justify-center gap-2">
+                <CheckCircle className="w-4 h-4" />
+                <span>{registeringNew ? 'جاري التسجيل...' : 'سجّل ومتابعة'}</span>
+              </button>
+              <button onClick={() => setShowQuickRegister(false)} disabled={registeringNew} className="bg-slate-100 text-slate-700 font-bold px-5 py-3 rounded-xl text-sm">
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

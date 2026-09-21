@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import EntityActions from '@/components/EntityActions';
 import DataTable from '@/components/DataTable';
-import { ArrowRight, Phone, Wallet, TrendingUp, FileText, X } from 'lucide-react';
+import { ArrowRight, Phone, Wallet, TrendingUp, FileText, X, CheckCircle } from 'lucide-react';
 
 export default function SupplierFilePage() {
   const params = useParams();
@@ -19,6 +19,14 @@ export default function SupplierFilePage() {
   const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'batches' | 'payments' | 'ledger'>('batches');
+
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentNotes, setPaymentNotes] = useState('');
+  const [selectedTreasury, setSelectedTreasury] = useState('');
+  const [treasuriesList, setTreasuriesList] = useState<any[]>([]);
+  const [treasuryBalances, setTreasuryBalances] = useState<any>({});
+  const [savingPayment, setSavingPayment] = useState(false);
   const [batchDetail, setBatchDetail] = useState<any>(null);
   const [yieldData, setYieldData] = useState<any>(null);
 
@@ -40,7 +48,55 @@ export default function SupplierFilePage() {
     const { data: pay } = await supabase.from('financial_vouchers').select('*').eq('entity_name', s.name).eq('type', 'payment').order('created_at', { ascending: false });
     setPayments(pay || []);
     setLoading(false);
+    loadTreasuries();
   }
+
+  const loadTreasuries = async () => {
+    const { data } = await supabase.from('treasury_accounts').select('*').eq('is_active', true).order('treasury_code');
+    if (data) setTreasuriesList(data);
+    const { data: bals } = await supabase.rpc('get_treasury_balances');
+    if (bals) {
+      const m: any = {};
+      bals.forEach((b: any) => { m[b.treasury_code] = Number(b.balance || 0); });
+      setTreasuryBalances(m);
+    }
+  };
+
+  const handleSavePayment = async () => {
+    const amount = Number(paymentAmount);
+    if (!amount || amount <= 0) { alert('أدخل مبلغاً صحيحاً'); return; }
+    if (!selectedTreasury) { alert('اختر الخزينة'); return; }
+    if (!supplier) return;
+
+    setSavingPayment(true);
+    try {
+      // 1. إيصال الدفع للمورد
+      const { error: vErr } = await supabase.from('financial_vouchers').insert([{
+        type: 'payment',
+        entity_name: supplier.name,
+        amount: amount,
+        payment_method: 'cash',
+        treasury_code: selectedTreasury,
+        notes: paymentNotes.trim() || 'دفعة سداد للمورد',
+      }]);
+      if (vErr) throw vErr;
+
+      // 2. تحديث رصيد المورد
+      const newBalance = Math.max(0, Number(supplier.balance || 0) - amount);
+      const { error: sErr } = await supabase.from('suppliers').update({ balance: newBalance }).eq('id', supplier.id);
+      if (sErr) throw sErr;
+
+      setShowPaymentModal(false);
+      setPaymentAmount('');
+      setPaymentNotes('');
+      setSelectedTreasury('');
+      await load();
+    } catch (err: any) {
+      alert('خطأ: ' + err.message);
+    } finally {
+      setSavingPayment(false);
+    }
+  };
 
   const openBatch = async (b: any) => {
     setBatchDetail(b);
@@ -119,7 +175,46 @@ export default function SupplierFilePage() {
     actual_whole_box: 'فراخ صندوق'
   };
 
-  if (loading) return <div className="p-8 text-center text-sm font-bold text-slate-400">جاري التحميل...</div>;
+  if (loading) return (
+    <div className="space-y-6">
+      <div className="bg-white p-6 rounded-3xl border border-slate-200 animate-pulse">
+        <div className="flex justify-between items-start gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-slate-200 rounded-xl"></div>
+            <div className="space-y-2">
+              <div className="h-5 w-40 bg-slate-200 rounded-lg"></div>
+              <div className="h-3 w-32 bg-slate-200 rounded-lg"></div>
+            </div>
+          </div>
+          <div className="text-left space-y-2">
+            <div className="h-3 w-24 bg-slate-200 rounded-lg"></div>
+            <div className="h-8 w-32 bg-slate-200 rounded-lg"></div>
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {[1,2,3].map(i => (
+          <div key={i} className="bg-white p-5 rounded-3xl border border-slate-200 animate-pulse space-y-3">
+            <div className="h-3 w-24 bg-slate-200 rounded-lg"></div>
+            <div className="h-7 w-32 bg-slate-200 rounded-lg"></div>
+            <div className="h-3 w-20 bg-slate-200 rounded-lg"></div>
+          </div>
+        ))}
+      </div>
+      <div className="bg-white p-5 rounded-3xl border border-slate-200 animate-pulse space-y-4">
+        <div className="flex gap-6 border-b pb-3">
+          <div className="h-4 w-24 bg-slate-200 rounded-lg"></div>
+          <div className="h-4 w-20 bg-slate-200 rounded-lg"></div>
+          <div className="h-4 w-24 bg-slate-200 rounded-lg"></div>
+        </div>
+        <div className="space-y-2">
+          <div className="h-12 w-full bg-slate-100 rounded-xl"></div>
+          <div className="h-12 w-full bg-slate-100 rounded-xl"></div>
+          <div className="h-12 w-full bg-slate-100 rounded-xl"></div>
+        </div>
+      </div>
+    </div>
+  );
   if (!supplier) return (
     <div className="p-8 text-center space-y-4">
       <p className="text-sm font-bold text-slate-500">المورد غير موجود</p>
@@ -144,6 +239,7 @@ export default function SupplierFilePage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <button onClick={() => setShowPaymentModal(true)} className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-3.5 h-10 rounded-xl text-xs flex items-center gap-1.5"><Wallet className="w-3.5 h-3.5" /><span>دفع للمورد</span></button>
             <EntityActions entityType="supplier" entity={supplier} onRefresh={load} showArchive={false} />
             <div className="text-left">
               <span className="text-[10px] font-bold text-slate-400 block">الرصيد الحالي</span>
@@ -259,6 +355,55 @@ export default function SupplierFilePage() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPaymentModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => !savingPayment && setShowPaymentModal(false)}>
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b pb-3">
+              <div>
+                <h3 className="text-base font-black text-slate-800">دفعة سداد للمورد</h3>
+                <p className="text-xs text-slate-500 font-bold mt-0.5">{supplier?.name}</p>
+              </div>
+              <button onClick={() => setShowPaymentModal(false)} disabled={savingPayment} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="bg-rose-50 border border-rose-200 p-3 rounded-xl">
+              <span className="text-[10px] font-bold text-rose-700 block">الرصيد المستحق للمورد</span>
+              <span className="font-mono font-black text-rose-900 text-lg">{Number(supplier?.balance || 0).toLocaleString()} ج</span>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">المبلغ المدفوع (ج) *</label>
+                <input type="number" step="0.01" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} placeholder="0.00" className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold font-mono outline-none focus:border-rose-600" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">الخزينة *</label>
+                <select value={selectedTreasury} onChange={(e) => setSelectedTreasury(e.target.value)} className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold outline-none focus:border-rose-600">
+                  <option value="">— اختر الخزينة —</option>
+                  {treasuriesList.map((t: any) => (
+                    <option key={t.treasury_code} value={t.treasury_code}>
+                      {t.name_ar} ({(treasuryBalances[t.treasury_code] || 0).toLocaleString()} ج)
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">ملاحظات</label>
+                <input type="text" value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} placeholder="مثال: دفعة سداد للمورد" className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold outline-none focus:border-rose-600" />
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button onClick={handleSavePayment} disabled={savingPayment} className="flex-1 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold py-3 rounded-xl text-sm flex items-center justify-center gap-2">
+                <CheckCircle className="w-4 h-4" />
+                <span>{savingPayment ? 'جاري الحفظ...' : 'تأكيد الدفع'}</span>
+              </button>
+              <button onClick={() => setShowPaymentModal(false)} disabled={savingPayment} className="bg-slate-100 text-slate-700 font-bold px-5 py-3 rounded-xl text-sm">إلغاء</button>
             </div>
           </div>
         </div>

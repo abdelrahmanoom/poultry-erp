@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import DataTable from '@/components/DataTable';
 import * as XLSX from 'xlsx';
-import { FileText, Wallet, History, TrendingDown, TrendingUp, Download } from 'lucide-react';
+import { FileText, Wallet, History, TrendingDown, TrendingUp, Download, ExternalLink } from 'lucide-react';
 
 export default function CustomersPage() {
   const supabase = createClient();
@@ -329,7 +329,7 @@ export default function CustomersPage() {
               <h2 className="text-base font-black text-blue-900">{selectedCust.name}</h2>
               <span className="text-xs font-bold text-slate-600">الهاتف: {selectedCust.phone || 'غير مسجل'}</span>
             </div>
-            <button onClick={() => setSelectedCust(null)} className="text-slate-400 font-bold text-sm">إغلاق</button>
+            <div className="flex gap-2 items-center"><button onClick={() => { const code = selectedCust.customer_code || selectedCust.id; setSelectedCust(null); router.push('/customers/' + code); }} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1"><ExternalLink className="w-3.5 h-3.5" /><span>فتح الملف الكامل</span></button><button onClick={() => setSelectedCust(null)} className="text-slate-400 hover:text-slate-700 font-bold text-sm">إغلاق</button></div>
           </div>
 
           <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -445,7 +445,6 @@ export default function CustomersPage() {
           searchPlaceholder="بحث..."
           emptyMessage="لا يوجد عملاء"
           rowKey={(c: any) => c.id}
-          rowHref={(c: any) => '/customers/' + (c.customer_code || c.id)}
         />
       </div>
     </div>

@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Plus, Trash2, BookOpen, Wallet, X, ChevronDown, ChevronLeft, Package, AlertTriangle, RefreshCw, Eye, EyeOff, Truck, Pencil, Building2, UserCheck, Users, Boxes, Bell, BellOff } from 'lucide-react';
+import { Plus, Trash2, BookOpen, Wallet, X, ChevronDown, ChevronLeft, Package, AlertTriangle, RefreshCw, Eye, EyeOff, Truck, Pencil, Building2, UserCheck, Users, Boxes, Bell, BellOff, Lock, Mail, MapPin, FileText, Calendar, Save, CheckCircle, Download } from 'lucide-react';
 
 export default function SettingsPage() {
   const supabase = createClient();
   const [activeTab, setActiveTab] = useState('products');
+  const [activeGroup, setActiveGroup] = useState('basic');
   const [openingSubTab, setOpeningSubTab] = useState('treasuries');
   const [toast, setToast] = useState<any>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -69,6 +70,18 @@ export default function SettingsPage() {
   const [openCustomers, setOpenCustomers] = useState<any[]>([{ name: '', phone: '', balance: 0 }]);
   const [openSuppliers, setOpenSuppliers] = useState<any[]>([{ name: '', phone: '', balance: 0 }]);
   const [openStock, setOpenStock] = useState<any[]>([]);
+  const [usersList, setUsersList] = useState<any[]>([]);
+  const [businessData, setBusinessData] = useState<any>(null);
+  const [businessSaving, setBusinessSaving] = useState(false);
+  const [showNewUserForm, setShowNewUserForm] = useState(false);
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserFullName, setNewUserFullName] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserRole, setNewUserRole] = useState('cashier');
+  const [editingUser, setEditingUser] = useState<any>(null);
+  const [editingUserPassword, setEditingUserPassword] = useState('');
+  const [changingPasswordUser, setChangingPasswordUser] = useState<any>(null);
+  const [newPasswordForUser, setNewPasswordForUser] = useState('');
 
   const showToast = (msg: string, type = 'success') => {
     setToast({ msg, type });
@@ -114,6 +127,14 @@ export default function SettingsPage() {
 
     const { data: suppData } = await supabase.from('suppliers').select('*').order('is_active', { ascending: false }).order('name');
     if (suppData) setSuppliersList(suppData);
+
+    // تفاصيل النشاط
+    const { data: bizData } = await supabase.from('tenants').select('*').eq('id', 1).maybeSingle();
+    if (bizData) setBusinessData(bizData);
+
+    // المستخدمون
+    const { data: usersData } = await supabase.from('system_users').select('id, username, full_name, role, tenant_id, is_active, created_at').eq('tenant_id', 1).order('id');
+    if (usersData) setUsersList(usersData);
 
     const { data: settings } = await supabase.from('system_settings').select('*');
     if (settings) {
@@ -485,6 +506,131 @@ export default function SettingsPage() {
     loadData();
   };
 
+  // ============================================================
+  // USERS MANAGEMENT
+  // ============================================================
+  const loadUsers = async () => {
+    const { data } = await supabase
+      .from('system_users')
+      .select('id, username, full_name, role, tenant_id, is_active, created_at')
+      .eq('tenant_id', 1)
+      .order('id');
+    if (data) setUsersList(data);
+  };
+
+  const handleSaveBusiness = async () => {
+    if (!businessData) return;
+    setBusinessSaving(true);
+    const { error } = await supabase.from('tenants').update({
+      name: businessData.name,
+      business_type: businessData.business_type,
+      owner_name: businessData.owner_name,
+      phone: businessData.phone,
+      email: businessData.email,
+      address: businessData.address,
+      city: businessData.city,
+      country: businessData.country,
+      tax_id: businessData.tax_id,
+      commercial_register: businessData.commercial_register,
+      notes: businessData.notes,
+      updated_at: new Date().toISOString(),
+    }).eq('id', 1);
+    setBusinessSaving(false);
+    if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+    showToast('تم حفظ تفاصيل النشاط');
+    loadData();
+  };
+
+  const handleAddUser = async (e: any) => {
+    e.preventDefault();
+    if (!newUserName.trim() || !newUserFullName.trim() || !newUserPassword.trim()) {
+      showToast('املأ كل الحقول', 'error');
+      return;
+    }
+    // تحقق من التفرد داخل نفس tenant
+    const { data: existing } = await supabase.from('system_users').select('id').eq('username', newUserName.trim()).eq('tenant_id', 1).maybeSingle();
+    if (existing) { showToast('اسم المستخدم موجود مسبقاً', 'error'); return; }
+
+    const { error } = await supabase.from('system_users').insert([{
+      username: newUserName.trim(),
+      full_name: newUserFullName.trim(),
+      password_hash: newUserPassword.trim(),
+      role: newUserRole,
+      tenant_id: 1,
+      is_active: true,
+    }]);
+
+    if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+
+    showToast('تم إضافة المستخدم');
+    setShowNewUserForm(false);
+    setNewUserName(''); setNewUserFullName(''); setNewUserPassword(''); setNewUserRole('cashier');
+    loadUsers();
+  };
+
+  const handleUpdateUser = async () => {
+    if (!editingUser) return;
+
+    // التحقق من عدم تكرار username
+    if (editingUser.username !== editingUser._originalUsername) {
+      const { data: dup } = await supabase
+        .from('system_users')
+        .select('id')
+        .eq('username', editingUser.username.trim())
+        .eq('tenant_id', 1)
+        .maybeSingle();
+      if (dup) { showToast('اسم المستخدم موجود مسبقاً', 'error'); return; }
+    }
+
+    const updateData: any = {
+      full_name: editingUser.full_name?.trim(),
+      username: editingUser.username?.trim(),
+      role: editingUser.role,
+    };
+
+    // إذا أُدخلت كلمة مرور جديدة → استبدلها بـ bcrypt
+    if (editingUserPassword.trim()) {
+      if (editingUserPassword.trim().length < 6) {
+        showToast('كلمة المرور 6 أحرف على الأقل', 'error');
+        return;
+      }
+      const bcryptLib = await import('bcryptjs');
+      updateData.password_hash = await bcryptLib.hash(editingUserPassword.trim(), 10);
+    }
+
+    const { error } = await supabase.from('system_users').update(updateData).eq('id', editingUser.id);
+
+    if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+    showToast('تم التحديث');
+    setEditingUser(null);
+    setEditingUserPassword('');
+    loadUsers();
+  };
+
+  const handleChangeUserPassword = async () => {
+    if (!changingPasswordUser || !newPasswordForUser.trim()) return;
+    if (newPasswordForUser.length < 6) { showToast('كلمة المرور 6 أحرف على الأقل', 'error'); return; }
+
+    const bcryptLib = await import('bcryptjs');
+    const hash = await bcryptLib.hash(newPasswordForUser.trim(), 10);
+
+    const { error } = await supabase.from('system_users').update({ password_hash: hash }).eq('id', changingPasswordUser.id);
+    if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+
+    showToast('تم تغيير كلمة المرور');
+    setChangingPasswordUser(null);
+    setNewPasswordForUser('');
+  };
+
+  const handleDeleteUser = async (user: any) => {
+    if (user.username === 'admin') { showToast('لا يمكن حذف المدير', 'error'); return; }
+    if (!confirm('تأكيد حذف المستخدم ' + user.username + '؟')) return;
+    const { error } = await supabase.from('system_users').delete().eq('id', user.id);
+    if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+    showToast('تم الحذف');
+    loadUsers();
+  };
+
   const approveAndLock = async () => {
     if (openingLocked) { showToast('الأرصدة مقفلة مسبقاً', 'error'); return; }
     let total = 0;
@@ -560,18 +706,56 @@ export default function SettingsPage() {
   const displayedSuppliers = showArchived ? suppliersList : suppliersList.filter(s => s.is_active !== false);
   const totalCash = Object.values(treasuryBalances).reduce((s: number, v: any) => s + Number(v || 0), 0) as number;
 
-  const tabs = [
-    { key: 'products', label: 'الأصناف' },
-    { key: 'treasuries', label: 'الخزائن' },
-    { key: 'suppliers', label: 'الموردين' },
-    { key: 'customers', label: 'العملاء' },
-    { key: 'pathways', label: 'مسارات التجهيز' },
-    { key: 'logistics', label: 'التكاليف اللوجستية' },
-    { key: 'alerts', label: 'قواعد التنبيهات' },
-    { key: 'opening', label: 'الأرصدة الافتتاحية' },
-    { key: 'docs', label: 'دليل التشغيل' }
+  const tabGroups = [
+    {
+      key: 'basic',
+      label: '📦 البيانات الأساسية',
+      color: 'blue',
+      tabs: [
+        { key: 'products', label: 'الأصناف' },
+        { key: 'treasuries', label: 'الخزائن' },
+        { key: 'suppliers', label: 'الموردين' },
+        { key: 'customers', label: 'العملاء' },
+      ],
+    },
+    {
+      key: 'operations',
+      label: '⚙️ التشغيل',
+      color: 'amber',
+      tabs: [
+        { key: 'pathways', label: 'مسارات التجهيز' },
+        { key: 'logistics', label: 'التكاليف اللوجستية' },
+        { key: 'alerts', label: 'قواعد التنبيهات' },
+      ],
+    },
+    {
+      key: 'accounting',
+      label: '💰 المحاسبة',
+      color: 'emerald',
+      tabs: [
+        { key: 'opening', label: 'الأرصدة الافتتاحية' },
+      ],
+    },
+    {
+      key: 'admin',
+      label: '🏢 الإدارة',
+      color: 'rose',
+      tabs: [
+        { key: 'business', label: 'تفاصيل النشاط' },
+        { key: 'users', label: 'المستخدمون' },
+      ],
+    },
   ];
 
+  const currentGroup = tabGroups.find(g => g.key === activeGroup) || tabGroups[0];
+
+  const switchGroup = (groupKey: string) => {
+    setActiveGroup(groupKey);
+    const grp = tabGroups.find(g => g.key === groupKey);
+    if (grp && grp.tabs.length > 0) {
+      setActiveTab(grp.tabs[0].key);
+    }
+  };
   return (
     <div className="space-y-6">
       {toast && (
@@ -719,9 +903,39 @@ export default function SettingsPage() {
       </div>
 
       <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-6">
-        <div className="flex flex-wrap gap-3 border-b border-slate-200 text-xs font-black pb-3">
-          {tabs.map(t => (
-            <button key={t.key} onClick={() => setActiveTab(t.key)} className={`pb-2 ${activeTab === t.key ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>{t.label}</button>
+        {/* Level 1: Groups */}
+        <div className="flex flex-wrap gap-2 border-b-2 border-slate-300 pb-3">
+          {tabGroups.map(g => (
+            <button
+              key={g.key}
+              onClick={() => switchGroup(g.key)}
+              className={
+                'px-4 py-2.5 rounded-xl text-xs font-black transition ' +
+                (activeGroup === g.key
+                  ? 'bg-slate-900 text-white shadow-md'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200')
+              }
+            >
+              {g.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Level 2: Sub-tabs */}
+        <div className="flex flex-wrap gap-3 pt-1 pb-2 border-b border-slate-200">
+          {currentGroup.tabs.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setActiveTab(t.key)}
+              className={
+                'pb-2 text-xs font-black transition ' +
+                (activeTab === t.key
+                  ? 'border-b-2 border-blue-600 text-blue-600'
+                  : 'text-slate-400 hover:text-slate-600')
+              }
+            >
+              {t.label}
+            </button>
           ))}
         </div>
 
@@ -1276,6 +1490,278 @@ export default function SettingsPage() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {activeTab === 'business' && businessData && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-200">
+              <div>
+                <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                  <Building2 className="w-4 h-4" />
+                  تفاصيل النشاط التجاري
+                </h3>
+                <p className="text-xs text-slate-500 font-bold mt-1">
+                  الاسم والعنوان والبيانات الرسمية — تظهر في الفواتير والتقارير
+                </p>
+              </div>
+              <button onClick={handleSaveBusiness} disabled={businessSaving} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-1.5">
+                <Save className="w-4 h-4" />
+                <span>{businessSaving ? 'جاري الحفظ...' : 'حفظ التعديلات'}</span>
+              </button>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">اسم النشاط التجاري *</label>
+                  <input type="text" value={businessData.name || ''} onChange={(e) => setBusinessData({ ...businessData, name: e.target.value })} className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold bg-slate-50 outline-none focus:border-blue-600" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">نوع النشاط</label>
+                  <select value={businessData.business_type || 'دواجن'} onChange={(e) => setBusinessData({ ...businessData, business_type: e.target.value })} className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold bg-slate-50 outline-none focus:border-blue-600">
+                    <option value="دواجن">دواجن</option>
+                    <option value="لحوم">لحوم</option>
+                    <option value="أسماك">أسماك</option>
+                    <option value="مطعم">مطعم</option>
+                    <option value="بقالة">بقالة</option>
+                    <option value="أخرى">أخرى</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">اسم المالك</label>
+                  <input type="text" value={businessData.owner_name || ''} onChange={(e) => setBusinessData({ ...businessData, owner_name: e.target.value })} className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold bg-slate-50 outline-none focus:border-blue-600" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">رقم الهاتف</label>
+                  <input type="text" value={businessData.phone || ''} onChange={(e) => setBusinessData({ ...businessData, phone: e.target.value })} className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold bg-slate-50 outline-none focus:border-blue-600 font-mono" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">البريد الإلكتروني</label>
+                  <input type="email" value={businessData.email || ''} onChange={(e) => setBusinessData({ ...businessData, email: e.target.value })} className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold bg-slate-50 outline-none focus:border-blue-600 font-mono" dir="ltr" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">المدينة</label>
+                  <input type="text" value={businessData.city || ''} onChange={(e) => setBusinessData({ ...businessData, city: e.target.value })} className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold bg-slate-50 outline-none focus:border-blue-600" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">العنوان التفصيلي</label>
+                <input type="text" value={businessData.address || ''} onChange={(e) => setBusinessData({ ...businessData, address: e.target.value })} placeholder="الشارع، الحي، العلامة المميزة" className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold bg-slate-50 outline-none focus:border-blue-600" />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">الدولة</label>
+                  <input type="text" value={businessData.country || 'مصر'} onChange={(e) => setBusinessData({ ...businessData, country: e.target.value })} className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold bg-slate-50 outline-none focus:border-blue-600" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">السجل التجاري</label>
+                  <input type="text" value={businessData.commercial_register || ''} onChange={(e) => setBusinessData({ ...businessData, commercial_register: e.target.value })} className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold bg-slate-50 outline-none focus:border-blue-600 font-mono" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">الرقم الضريبي</label>
+                  <input type="text" value={businessData.tax_id || ''} onChange={(e) => setBusinessData({ ...businessData, tax_id: e.target.value })} className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold bg-slate-50 outline-none focus:border-blue-600 font-mono" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">ملاحظات إضافية</label>
+                <textarea value={businessData.notes || ''} onChange={(e) => setBusinessData({ ...businessData, notes: e.target.value })} rows={3} className="w-full border-2 border-slate-200 rounded-xl px-3 py-2 text-sm font-bold bg-slate-50 outline-none focus:border-blue-600 resize-none" />
+              </div>
+
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-[11px] font-bold text-slate-500">
+                <Calendar className="w-3.5 h-3.5 inline mr-1" />
+                تاريخ الإنشاء: {businessData.created_at ? new Date(businessData.created_at).toLocaleDateString('en-GB') : '—'}
+                {businessData.updated_at && (
+                  <span className="mr-4">
+                    آخر تحديث: {new Date(businessData.updated_at).toLocaleDateString('en-GB')}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        {activeTab === 'users' && (
+          <div className="space-y-4">
+            {/* Header */}
+            <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-200">
+              <div>
+                <h3 className="text-sm font-black text-slate-800">إدارة مستخدمي النشاط</h3>
+                <p className="text-xs text-slate-500 font-bold mt-1">
+                  {usersList.length} مستخدم • كل مستخدم له صلاحيات مختلفة
+                </p>
+              </div>
+              {!showNewUserForm && (
+                <button onClick={() => setShowNewUserForm(true)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5">
+                  <Plus className="w-4 h-4" /><span>مستخدم جديد</span>
+                </button>
+              )}
+            </div>
+
+            {/* Add Form */}
+            {showNewUserForm && (
+              <form onSubmit={handleAddUser} className="bg-emerald-50 border-2 border-emerald-200 p-5 rounded-2xl space-y-3">
+                <div className="flex justify-between items-center border-b border-emerald-200 pb-2">
+                  <h4 className="text-sm font-black text-emerald-900">إضافة مستخدم جديد</h4>
+                  <button type="button" onClick={() => setShowNewUserForm(false)} className="text-emerald-700"><X className="w-5 h-5" /></button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-emerald-900 mb-1">اسم المستخدم *</label>
+                    <input type="text" value={newUserName} onChange={(e) => setNewUserName(e.target.value)} placeholder="مثال: ali" className="w-full border-2 border-emerald-200 rounded-xl px-3 h-11 text-sm font-bold bg-white" required />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-emerald-900 mb-1">الاسم الكامل *</label>
+                    <input type="text" value={newUserFullName} onChange={(e) => setNewUserFullName(e.target.value)} placeholder="مثال: علي محمد" className="w-full border-2 border-emerald-200 rounded-xl px-3 h-11 text-sm font-bold bg-white" required />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-emerald-900 mb-1">كلمة المرور *</label>
+                    <input type="text" value={newUserPassword} onChange={(e) => setNewUserPassword(e.target.value)} placeholder="6 أحرف على الأقل" className="w-full border-2 border-emerald-200 rounded-xl px-3 h-11 text-sm font-bold bg-white font-mono" required />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-emerald-900 mb-1">الدور *</label>
+                    <select value={newUserRole} onChange={(e) => setNewUserRole(e.target.value)} className="w-full border-2 border-emerald-200 rounded-xl px-3 h-11 text-sm font-bold bg-white">
+                      <option value="admin">مدير</option>
+                      <option value="cashier">كاشير</option>
+                      <option value="inventory">مخزن</option>
+                      <option value="slaughter">جزار/إنتاج</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button type="submit" className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-xs">إضافة المستخدم</button>
+                  <button type="button" onClick={() => setShowNewUserForm(false)} className="bg-slate-200 text-slate-700 font-bold px-5 py-2.5 rounded-xl text-xs">إلغاء</button>
+                </div>
+              </form>
+            )}
+
+            {/* Users List */}
+            {usersList.length === 0 ? (
+              <p className="text-xs text-slate-400 text-center py-6 font-bold">لا يوجد مستخدمون</p>
+            ) : (
+              <div className="overflow-x-auto border-2 border-slate-200 rounded-2xl">
+                <table className="w-full text-right text-xs">
+                  <thead className="bg-slate-800 text-white">
+                    <tr>
+                      <th className="p-3">#</th>
+                      <th className="p-3">اسم المستخدم</th>
+                      <th className="p-3">الاسم الكامل</th>
+                      <th className="p-3">الدور</th>
+                      <th className="p-3">الحالة</th>
+                      <th className="p-3 text-center">إجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {usersList.map((u) => (
+                      <tr key={u.id} className="hover:bg-slate-50">
+                        <td className="p-3 font-mono text-slate-500">{u.id}</td>
+                        <td className="p-3 font-bold font-mono text-slate-800">{u.username}</td>
+                        <td className="p-3 font-bold text-slate-700">{u.full_name}</td>
+                        <td className="p-3">
+                          <span className={'text-[10px] font-bold px-2 py-0.5 rounded-lg ' + (
+                            u.role === 'admin' ? 'bg-rose-100 text-rose-700' :
+                            u.role === 'cashier' ? 'bg-blue-100 text-blue-700' :
+                            u.role === 'inventory' ? 'bg-amber-100 text-amber-700' :
+                            'bg-slate-100 text-slate-700'
+                          )}>
+                            {u.role === 'admin' ? 'مدير' :
+                             u.role === 'cashier' ? 'كاشير' :
+                             u.role === 'inventory' ? 'مخزن' :
+                             u.role === 'slaughter' ? 'جزار/إنتاج' : u.role}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          {u.is_active !== false ? (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg">نشط</span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg">معطّل</span>
+                          )}
+                        </td>
+                        <td className="p-3">
+                          <div className="flex gap-1 justify-center">
+                            <button onClick={() => { setEditingUser({ ...u, _originalUsername: u.username }); setEditingUserPassword(''); }} className="text-blue-600 hover:bg-blue-50 p-2 rounded-lg" title="تعديل">
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => { setChangingPasswordUser(u); setNewPasswordForUser(''); }} className="text-amber-600 hover:bg-amber-50 p-2 rounded-lg" title="تغيير كلمة المرور">
+                              <Lock className="w-3.5 h-3.5" />
+                            </button>
+                            {u.username !== 'admin' && (
+                              <button onClick={() => handleDeleteUser(u)} className="text-rose-600 hover:bg-rose-50 p-2 rounded-lg" title="حذف">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Edit Modal */}
+            {editingUser && (
+              <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setEditingUser(null)}>
+                <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex justify-between items-center border-b pb-3">
+                    <h3 className="text-base font-black text-slate-800">تعديل المستخدم: {editingUser.username}</h3>
+                    <button onClick={() => setEditingUser(null)} className="text-slate-400"><X className="w-5 h-5" /></button>
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">الاسم الكامل</label>
+                      <input type="text" value={editingUser.full_name} onChange={(e) => setEditingUser({ ...editingUser, full_name: e.target.value })} className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">اسم المستخدم (للدخول)</label>
+                      <input type="text" value={editingUser.username} onChange={(e) => setEditingUser({ ...editingUser, username: e.target.value })} className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold font-mono" dir="ltr" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">الدور</label>
+                      <select value={editingUser.role} onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value })} className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold">
+                        <option value="admin">مدير</option>
+                        <option value="cashier">كاشير</option>
+                        <option value="inventory">مخزن</option>
+                        <option value="slaughter">جزار/إنتاج</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">كلمة المرور الجديدة <span className="text-slate-400 font-normal">(اتركها فارغة لعدم التغيير)</span></label>
+                      <input type="text" value={editingUserPassword} onChange={(e) => setEditingUserPassword(e.target.value)} placeholder="6 أحرف على الأقل" className="w-full border-2 border-amber-200 rounded-xl px-3 h-11 text-sm font-bold font-mono bg-amber-50" />
+                    </div>
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <button onClick={handleUpdateUser} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-sm">حفظ التعديلات</button>
+                    <button onClick={() => { setEditingUser(null); setEditingUserPassword(''); }} className="bg-slate-100 text-slate-700 font-bold px-5 py-3 rounded-xl text-sm">إلغاء</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Change Password Modal */}
+            {changingPasswordUser && (
+              <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setChangingPasswordUser(null)}>
+                <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex justify-between items-center border-b pb-3">
+                    <h3 className="text-base font-black text-slate-800">تغيير كلمة المرور</h3>
+                    <button onClick={() => setChangingPasswordUser(null)} className="text-slate-400"><X className="w-5 h-5" /></button>
+                  </div>
+                  <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-xs font-bold text-amber-900">
+                    المستخدم: <span className="font-mono">{changingPasswordUser.username}</span>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">كلمة المرور الجديدة</label>
+                    <input type="text" value={newPasswordForUser} onChange={(e) => setNewPasswordForUser(e.target.value)} placeholder="6 أحرف على الأقل" className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold font-mono" />
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <button onClick={handleChangeUserPassword} className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 rounded-xl text-sm">تغيير كلمة المرور</button>
+                    <button onClick={() => setChangingPasswordUser(null)} className="bg-slate-100 text-slate-700 font-bold px-5 py-3 rounded-xl text-sm">إلغاء</button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
