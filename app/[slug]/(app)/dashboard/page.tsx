@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getCurrentTenantId } from '@/lib/tenant-client';
 import { Wallet, TrendingUp, AlertTriangle, Package, Scissors, Activity } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -35,10 +36,11 @@ export default function DashboardPage() {
   async function loadData() {
     const { data: priceData } = await supabase
       .from('market_prices').select('*')
+      .eq('tenant_id', getCurrentTenantId())
       .order('created_at', { ascending: false }).limit(1).maybeSingle();
     if (priceData?.exchange_price) setExchangePrice(Number(priceData.exchange_price));
 
-    const { data: vouchers } = await supabase.from('financial_vouchers').select('type, amount');
+    const { data: vouchers } = await supabase.from('financial_vouchers').select('type, amount').eq('tenant_id', getCurrentTenantId());
     if (vouchers) {
       let total = 0;
       vouchers.forEach((v: any) => {
@@ -49,23 +51,26 @@ export default function DashboardPage() {
       setCashBalance(total);
     }
 
-    const { data: custs } = await supabase.from('customers').select('balance').eq('is_active', true);
+    const { data: custs } = await supabase.from('customers').select('balance').eq('tenant_id', getCurrentTenantId()).eq('is_active', true);
     if (custs) setReceivables(custs.reduce((s: number, c: any) => s + Number(c.balance || 0), 0));
-    const { data: supps } = await supabase.from('suppliers').select('balance').eq('is_active', true);
+    const { data: supps } = await supabase.from('suppliers').select('balance').eq('tenant_id', getCurrentTenantId()).eq('is_active', true);
     if (supps) setPayables(supps.reduce((s: number, c: any) => s + Number(c.balance || 0), 0));
 
     const { data: inv } = await supabase.from('inventory')
       .select('product_code, product_name_ar, stock_kg, pricing_value, pricing_type')
+      .eq('tenant_id', getCurrentTenantId())
       .eq('is_active', true).order('product_code');
     if (inv) setInventory(inv);
 
     const { data: batch } = await supabase
       .from('batches').select('*')
+      .eq('tenant_id', getCurrentTenantId())
       .order('created_at', { ascending: false }).limit(1).maybeSingle();
     if (batch) {
       setLatestBatch(batch);
       const { data: yp } = await supabase
         .from('yield_processing').select('*')
+        .eq('tenant_id', getCurrentTenantId())
         .eq('batch_id', batch.id).maybeSingle();
       if (yp) setLatestYield(yp);
     }
@@ -77,6 +82,7 @@ export default function DashboardPage() {
     const { data: invs } = await supabase
       .from('sales_invoices')
       .select('created_at, total_amount, cogs, status')
+      .eq('tenant_id', getCurrentTenantId())
       .gte('created_at', sinceStr).order('created_at');
     const dayMap: any = {};
     for (let i = 0; i < 7; i++) {
@@ -100,7 +106,7 @@ export default function DashboardPage() {
     // نحصر التنبيهات في الأصناف التي لها سجل إنتاج (ظهرت في آخر شروة)
     const producedCodes = new Set<string>();
     if (batch) {
-      const { data: yp2 } = await supabase.from('yield_processing').select('*').eq('batch_id', batch.id).maybeSingle();
+      const { data: yp2 } = await supabase.from('yield_processing').select('*').eq('tenant_id', getCurrentTenantId()).eq('batch_id', batch.id).maybeSingle();
       if (yp2) {
         const codeMap: any = {
           actual_fillet: 'P-1001', actual_thighs: 'P-1003', actual_wings: 'P-1004',
@@ -124,6 +130,7 @@ export default function DashboardPage() {
     const { data: devInvs } = await supabase
       .from('sales_invoices')
       .select('invoice_code, id, status')
+      .eq('tenant_id', getCurrentTenantId())
       .eq('has_price_deviation', true)
       .order('created_at', { ascending: false })
       .limit(3);
@@ -137,6 +144,7 @@ export default function DashboardPage() {
     const { data: recent } = await supabase
       .from('financial_vouchers')
       .select('created_at, type, entity_name, amount')
+      .eq('tenant_id', getCurrentTenantId())
       .order('created_at', { ascending: false }).limit(5);
     setRecentMoves(recent || []);
   }
@@ -151,21 +159,21 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white p-5 rounded-3xl border border-slate-200 flex flex-wrap justify-between items-center gap-3">
+      <div className="bg-white p-5 rounded-3xl border border-slate-200 flex flex-wrap justify-between items-center gap-3 flex-wrap">
         <div>
           <h1 className="text-xl font-black text-slate-900">لوحة التحكم</h1>
           <p className="text-xs text-blue-600 font-bold mt-1">
             سعر البورصة المعتمد اليوم: <span className="font-mono text-sm">{exchangePrice} ج</span>
           </p>
         </div>
-        <div className="bg-emerald-50 border border-emerald-200 px-4 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-2">
+        <div className="bg-emerald-50 border border-emerald-200 px-4 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-2 flex-wrap">
           <Wallet className="w-4 h-4 text-emerald-600" />
           <span>السيولة المتاحة:</span>
           <span className="font-mono font-black text-emerald-700 text-sm">{cashBalance.toLocaleString()} ج</span>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-6 border-b border-slate-200 text-xs font-black">
+      <div className="flex flex-wrap gap-6 border-b border-slate-200 text-xs font-black flex-wrap">
         <button onClick={() => setActiveTab('overview')} className={'pb-2 ' + (activeTab === 'overview' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-400')}>
           نظرة عامة
         </button>
@@ -177,7 +185,7 @@ export default function DashboardPage() {
       {activeTab === 'overview' && (
         <div className="space-y-6">
           <div className="bg-white p-5 rounded-3xl border border-slate-200">
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
               <Package className="w-4 h-4 text-slate-700" />
               <h2 className="text-sm font-black text-slate-800">المخزون الحالي</h2>
             </div>
@@ -213,7 +221,7 @@ export default function DashboardPage() {
 
           {alerts.length > 0 && (
             <div className="bg-white p-5 rounded-3xl border border-slate-200 space-y-2">
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
                 <AlertTriangle className="w-4 h-4 text-amber-500" />
                 <h2 className="text-sm font-black text-slate-800">تنبيهات ({alerts.length})</h2>
               </div>
@@ -226,8 +234,8 @@ export default function DashboardPage() {
           )}
 
           <div className="bg-white p-6 rounded-3xl border border-slate-200">
-            <div className="flex items-center justify-between border-b pb-3 mb-4">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between border-b pb-3 mb-4 flex-wrap gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
                 <div className="bg-blue-100 p-2 rounded-xl"><TrendingUp className="w-4 h-4 text-blue-700" /></div>
                 <div>
                   <h2 className="text-sm font-black text-slate-800">مبيعات آخر 7 أيام</h2>
@@ -254,14 +262,14 @@ export default function DashboardPage() {
           </div>
 
           <div className="bg-white p-5 rounded-3xl border border-slate-200">
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
               <Activity className="w-4 h-4 text-slate-700" />
               <h2 className="text-sm font-black text-slate-800">آخر 5 حركات</h2>
             </div>
             <div className="space-y-1.5">
               {recentMoves.length === 0 && <p className="text-xs text-slate-400 text-center py-3">لا توجد حركات</p>}
               {recentMoves.map((m: any, i: number) => (
-                <div key={i} className="flex justify-between items-center p-2 bg-slate-50 rounded-xl text-xs font-bold">
+                <div key={i} className="flex justify-between items-center p-2 bg-slate-50 rounded-xl text-xs font-bold flex-wrap gap-2 flex-wrap">
                   <span className="font-mono text-slate-500">{fmtTime(m.created_at)}</span>
                   <span className="flex-1 px-2">{m.type === 'receipt' ? 'تحصيل وارد' : m.type === 'payment' ? 'سداد صادر' : m.type === 'expense' ? 'مصروف' : 'قيد'} — {m.entity_name}</span>
                   <span className={'font-mono ' + (m.type === 'receipt' ? 'text-emerald-700' : 'text-rose-700')}>
@@ -279,11 +287,11 @@ export default function DashboardPage() {
           {latestBatch ? (
             <>
               <div className="bg-white p-5 rounded-3xl border border-slate-200">
-                <div className="flex items-center gap-2 mb-3">
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
                   <Scissors className="w-4 h-4 text-slate-700" />
                   <h2 className="text-sm font-black text-slate-800">آخر شروة</h2>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="bg-slate-50 p-3 rounded-xl">
                     <span className="text-[10px] font-bold text-slate-500 block">المزرعة</span>
                     <span className="text-sm font-black">{latestBatch.supplier_name || '—'}</span>
@@ -315,7 +323,7 @@ export default function DashboardPage() {
                           const actual = Number(latestYield[item.key] || 0);
                           const pct = (actual / denom) * 100;
                           return (
-                            <div key={item.key} className="flex items-center gap-3">
+                            <div key={item.key} className="flex items-center gap-3 flex-wrap">
                               <span className="w-32 text-xs font-bold text-slate-700 shrink-0">{item.label}</span>
                               <div className="flex-1 bg-slate-100 rounded-full h-5 overflow-hidden">
                                 <div className="bg-blue-600 h-full transition-all" style={{ width: pct + '%' }}></div>
@@ -334,7 +342,7 @@ export default function DashboardPage() {
                     const isMismatch = liveW > 0 && totalYield > liveW;
                     const wastePct = !isMismatch && liveW > 0 ? ((liveW - totalYield) / liveW) * 100 : null;
                     return (
-                      <div className="mt-4 pt-4 border-t border-slate-200 grid grid-cols-3 gap-3 text-xs">
+                      <div className="mt-4 pt-4 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                         <div className="bg-slate-50 p-3 rounded-xl">
                           <span className="text-slate-500 font-bold block text-[10px]">إجمالي الإنتاج</span>
                           <span className="font-mono font-black">{totalYield.toFixed(1)} كجم</span>
@@ -359,7 +367,7 @@ export default function DashboardPage() {
 
               <div className="bg-white p-5 rounded-3xl border border-slate-200">
                 <h2 className="text-sm font-black text-slate-800 mb-3">تفصيل تكلفة الشروة</h2>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                <div className="grid grid-cols-2 md:grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                   <div className="bg-slate-50 p-3 rounded-xl">
                     <span className="text-slate-500 font-bold block text-[10px]">سعر التنفيذ</span>
                     <span className="font-mono font-black">{Number(latestBatch.execution_price).toFixed(2)} ج/كجم</span>

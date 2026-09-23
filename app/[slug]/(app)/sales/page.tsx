@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getCurrentTenantId } from '@/lib/tenant-client';
 import { AlertTriangle } from 'lucide-react';
 import DataTable from '@/components/DataTable';
 import Autocomplete from '@/components/Autocomplete';
@@ -41,25 +42,25 @@ export default function SalesPage() {
 
   useEffect(() => {
     async function loadProducts() {
-      const { data } = await supabase.from('inventory').select('product_code, product_name_ar, stock_kg, pricing_value, pricing_type').eq('is_active', true).order('product_code');
+      const { data } = await supabase.from('inventory').select('product_code, product_name_ar, stock_kg, pricing_value, pricing_type').eq('tenant_id', getCurrentTenantId()).eq('is_active', true).order('product_code');
       if (data) setAvailableProducts(data);
     }
     loadProducts();
 
     async function loadCustomersList() {
-      const { data } = await supabase.from('customers').select('id, name, phone').eq('is_active', true).order('name');
+      const { data } = await supabase.from('customers').select('id, name, phone').eq('tenant_id', getCurrentTenantId()).eq('is_active', true).order('name');
       if (data) setCustomersList(data);
     }
     loadCustomersList();
 
     async function loadMarginSetting() {
-      const { data } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'min_profit_margin_percent').maybeSingle();
+      const { data } = await supabase.from('system_settings').select('setting_value').eq('tenant_id', getCurrentTenantId()).eq('setting_key', 'min_profit_margin_percent').maybeSingle();
       if (data) setMinMargin(Number(data.setting_value || 0));
     }
     loadMarginSetting();
 
     async function loadMarketPrice() {
-      const { data } = await supabase.from('market_prices').select('exchange_price').order('created_at', { ascending: false }).limit(1).maybeSingle();
+      const { data } = await supabase.from('market_prices').select('exchange_price').eq('tenant_id', getCurrentTenantId()).order('created_at', { ascending: false }).limit(1).maybeSingle();
       if (data) setMarketPrice(Number(data.exchange_price || 0));
     }
     loadMarketPrice();
@@ -76,6 +77,7 @@ export default function SalesPage() {
       const { data } = await supabase
         .from('sales_invoices')
         .select('*')
+        .eq('tenant_id', getCurrentTenantId())
         .order('created_at', { ascending: false })
         .limit(15);
       if (data) setRecentInvoices(data);
@@ -126,6 +128,7 @@ export default function SalesPage() {
       return;
     }
     const { error } = await supabase.rpc('cancel_invoice', {
+      p_tenant_id: getCurrentTenantId(),
       p_invoice_id: selectedInvoice.id,
       p_reason: cancelReason.trim()
     });
@@ -137,7 +140,7 @@ export default function SalesPage() {
     setShowCancelModal(false);
     setSelectedInvoice(null);
     setCancelReason('');
-    const { data } = await supabase.from('sales_invoices').select('*').order('created_at', { ascending: false }).limit(15);
+    const { data } = await supabase.from('sales_invoices').select('*').eq('tenant_id', getCurrentTenantId()).order('created_at', { ascending: false }).limit(15);
     if (data) setRecentInvoices(data);
   };
 
@@ -146,6 +149,7 @@ export default function SalesPage() {
     const violations: any[] = [];
     for (const item of items) {
       const { data: cost } = await supabase.rpc('peek_fifo_cost', {
+        p_tenant_id: getCurrentTenantId(),
         p_product_code: item.product_code,
         p_qty: Number(item.qty)
       });
@@ -237,8 +241,8 @@ export default function SalesPage() {
 
     try {
       if (remaining > 0 && customerName) {
-        const { data: custCheck } = await supabase.from('customers').select('balance, credit_limit').eq('name', customerName).maybeSingle();
-        const { data: creditSetting } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'alert_credit_limit').maybeSingle();
+        const { data: custCheck } = await supabase.from('customers').select('balance, credit_limit').eq('tenant_id', getCurrentTenantId()).eq('name', customerName).maybeSingle();
+        const { data: creditSetting } = await supabase.from('system_settings').select('setting_value').eq('tenant_id', getCurrentTenantId()).eq('setting_key', 'alert_credit_limit').maybeSingle();
         const defaultLimit = Number(creditSetting?.setting_value || 50000);
         const currentDebt = custCheck ? Number(custCheck.balance || 0) : 0;
         const creditLimit = custCheck ? Number(custCheck.credit_limit || defaultLimit) : defaultLimit;
@@ -251,6 +255,7 @@ export default function SalesPage() {
       }
 
       const { data: inv, error: invErr } = await supabase.from('sales_invoices').insert([{
+        tenant_id: getCurrentTenantId(),
         customer_name: customerName || 'عميل تجزئة مباشر',
         total_amount: total,
         paid_amount: paid,
@@ -266,6 +271,7 @@ export default function SalesPage() {
 
       for (const item of items) {
         const { data: cogsResult, error: cogsErr } = await supabase.rpc('consume_fifo', {
+          p_tenant_id: getCurrentTenantId(),
           p_product_code: item.product_code,
           p_qty: Number(item.qty)
         });
@@ -282,6 +288,7 @@ export default function SalesPage() {
         totalCogs += lineCogs;
 
         await supabase.from('sales_items').insert([{
+          tenant_id: getCurrentTenantId(),
           invoice_id: inv.id,
           product_code: item.product_code,
           quantity_kg: Number(item.qty),
@@ -291,19 +298,20 @@ export default function SalesPage() {
           price_deviation_percent: Number(deviationPct(item).toFixed(2))
         }]);
 
-        const { data: stockData } = await supabase.from('inventory').select('stock_kg').eq('product_code', item.product_code).maybeSingle();
+        const { data: stockData } = await supabase.from('inventory').select('stock_kg').eq('tenant_id', getCurrentTenantId()).eq('product_code', item.product_code).maybeSingle();
         if (stockData) {
           await supabase.from('inventory').update({
             stock_kg: Number(stockData.stock_kg || 0) - Number(item.qty),
             last_updated: new Date()
-          }).eq('product_code', item.product_code);
+          }).eq('tenant_id', getCurrentTenantId()).eq('product_code', item.product_code);
         }
       }
 
-      await supabase.from('sales_invoices').update({ cogs: Number(totalCogs.toFixed(2)) }).eq('id', inv.id);
+      await supabase.from('sales_invoices').update({ cogs: Number(totalCogs.toFixed(2)) }).eq('tenant_id', getCurrentTenantId()).eq('id', inv.id);
 
       if (paid > 0) {
         await supabase.from('financial_vouchers').insert([{
+          tenant_id: getCurrentTenantId(),
           type: 'receipt',
           entity_name: customerName || 'عميل تجزئة مباشر',
           amount: paid,
@@ -313,27 +321,28 @@ export default function SalesPage() {
       }
 
       if (customerName && customerName.trim() && customerName !== 'عميل تجزئة مباشر') {
-        const { data: cust } = await supabase.from('customers').select('*').eq('name', customerName.trim()).maybeSingle();
+        const { data: cust } = await supabase.from('customers').select('*').eq('tenant_id', getCurrentTenantId()).eq('name', customerName.trim()).maybeSingle();
         let linkedCustomerId: number | null = null;
         if (cust) {
           linkedCustomerId = cust.id;
           if (remaining > 0) {
-            await supabase.from('customers').update({ balance: Number(cust.balance || 0) + remaining }).eq('id', cust.id);
+            await supabase.from('customers').update({ balance: Number(cust.balance || 0) + remaining }).eq('tenant_id', getCurrentTenantId()).eq('id', cust.id);
           }
         } else {
-          const { data: newCust } = await supabase.from('customers').insert([{ name: customerName.trim(), phone: phone || null, balance: remaining > 0 ? remaining : 0 }]).select().single();
+          const { data: newCust } = await supabase.from('customers').insert([{ tenant_id: getCurrentTenantId(), name: customerName.trim(), phone: phone || null, balance: remaining > 0 ? remaining : 0 }]).select().single();
           if (newCust) linkedCustomerId = newCust.id;
         }
         if (linkedCustomerId) {
-          await supabase.from('sales_invoices').update({ customer_id: linkedCustomerId }).eq('id', inv.id);
+          await supabase.from('sales_invoices').update({ customer_id: linkedCustomerId }).eq('tenant_id', getCurrentTenantId()).eq('id', inv.id);
         }
       }
 
       showToast('تم اعتماد الفاتورة وترحيل المخزون بنجاح');
-      const { data: updated } = await supabase.from('sales_invoices').select('*').order('created_at', { ascending: false }).limit(15);
+      const { data: updated } = await supabase.from('sales_invoices').select('*').eq('tenant_id', getCurrentTenantId()).order('created_at', { ascending: false }).limit(15);
       if (updated) setRecentInvoices(updated);
       const { data: freshProds } = await supabase.from('inventory')
         .select('product_code, product_name_ar, stock_kg, pricing_value, pricing_type')
+        .eq('tenant_id', getCurrentTenantId())
         .eq('is_active', true).order('product_code');
       if (freshProds) setAvailableProducts(freshProds);
       setCustomerName('');
@@ -343,8 +352,8 @@ export default function SalesPage() {
       setItems([{ id: Date.now(), product_code: '', qty: 0, price: 0 }]);
     } catch (err: any) {
       if (savedInvoiceId) {
-        await supabase.from('sales_items').delete().eq('invoice_id', savedInvoiceId);
-        await supabase.from('sales_invoices').delete().eq('id', savedInvoiceId);
+        await supabase.from('sales_items').delete().eq('tenant_id', getCurrentTenantId()).eq('invoice_id', savedInvoiceId);
+        await supabase.from('sales_invoices').delete().eq('tenant_id', getCurrentTenantId()).eq('id', savedInvoiceId);
       }
       showToast('خطأ في حفظ الفاتورة: ' + err.message, 'error');
     }
@@ -357,7 +366,7 @@ export default function SalesPage() {
     if (!inv || inv.status === 'cancelled') return;
     setInvoiceDetail(inv);
     setInvoiceDetailItems([]);
-    const { data } = await supabase.from('sales_items').select('*').eq('invoice_id', inv.id);
+    const { data } = await supabase.from('sales_items').select('*').eq('tenant_id', getCurrentTenantId()).eq('invoice_id', inv.id);
     if (data) setInvoiceDetailItems(data);
   };
   const invoiceColumns = [
@@ -366,7 +375,7 @@ export default function SalesPage() {
       exportValue: (inv: any) => inv.invoice_code || ('INV-' + inv.id),
       label: 'رقم الفاتورة',
       searchable: true,
-      render: (inv: any) => <span className="font-bold text-blue-700 font-mono inline-flex items-center gap-1">{inv.has_price_deviation && <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />}{inv.invoice_code || ('INV-' + inv.id)}</span>
+      render: (inv: any) => <span className="font-bold text-blue-700 font-mono inline-flex items-center gap-1 flex-wrap">{inv.has_price_deviation && <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />}{inv.invoice_code || ('INV-' + inv.id)}</span>
     },
     {
       key: 'created_at',
@@ -417,7 +426,7 @@ export default function SalesPage() {
     {showLowPriceModal && lowPriceItems.length > 0 && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-4 text-right max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center gap-3 border-b pb-3 text-rose-700">
+            <div className="flex items-center gap-3 border-b pb-3 text-rose-700 flex-wrap">
               <AlertTriangle className="w-8 h-8" />
               <div>
                 <h3 className="text-base font-bold">تحذير: البيع بأقل من التكلفة</h3>
@@ -426,7 +435,7 @@ export default function SalesPage() {
             </div>
 
             <div className="overflow-x-auto border rounded-2xl">
-              <table className="w-full text-right text-xs">
+              <table className="w-full text-right text-xs min-w-[600px]">
                 <thead className="bg-slate-800 text-white">
                   <tr>
                     <th className="p-2">الصنف</th>
@@ -454,7 +463,7 @@ export default function SalesPage() {
               هذه الفاتورة ستحقق خسارة. هل أنت متأكد من المتابعة؟
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <button onClick={() => handleSaveInvoice(true)} className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 rounded-xl text-xs">أوافق على البيع بأقل من التكلفة</button>
               <button onClick={() => { setShowLowPriceModal(false); setLowPriceItems([]); }} className="bg-slate-100 text-slate-700 font-bold px-5 rounded-xl text-xs">إلغاء</button>
             </div>
@@ -470,7 +479,7 @@ export default function SalesPage() {
               <p className="text-xs text-slate-600 mt-1">الأسعار التالية تختلف عن سعر السوق بأكثر من 20%</p>
             </div>
             <div className="p-5 max-h-[60vh] overflow-y-auto">
-              <table className="w-full text-right text-xs">
+              <table className="w-full text-right text-xs min-w-[600px]">
                 <thead className="bg-slate-800 text-white">
                   <tr>
                     <th className="p-2">الصنف</th>
@@ -494,7 +503,7 @@ export default function SalesPage() {
                 هل تريد المتابعة رغم الانحراف؟ سيتم تسجيل النسبة في التقرير.
               </p>
             </div>
-            <div className="p-5 border-t flex gap-2">
+            <div className="p-5 border-t flex gap-2 flex-wrap">
               <button onClick={() => { setShowPriceDeviationModal(false); handleSaveInvoice(true); }} className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 rounded-xl text-xs">متابعة على أي حال</button>
               <button onClick={() => { setShowPriceDeviationModal(false); setPriceDeviations([]); }} className="bg-slate-100 text-slate-700 font-bold px-5 rounded-xl text-xs">رجوع للتعديل</button>
             </div>
@@ -514,7 +523,7 @@ export default function SalesPage() {
       </div>
 
       <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+        <div className="grid grid-cols-1 md:grid-cols-2 sm:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1.5">اسم العميل أو الجهة:</label>
             <div className="space-y-2">
@@ -525,7 +534,7 @@ export default function SalesPage() {
                 placeholder="اسم العميل"
                 className="w-full border rounded-xl px-3 text-xs font-bold bg-white h-11"
               />
-              <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600 cursor-pointer select-none">
+              <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600 cursor-pointer select-none flex-wrap">
                 عميل نقدي بدون تسجيل
               </label>
             </div>
@@ -549,7 +558,7 @@ export default function SalesPage() {
         </div>
 
         <div className="overflow-x-auto space-y-3">
-          <table className="w-full text-right text-xs">
+          <table className="w-full text-right text-xs min-w-[600px]">
             <thead className="bg-slate-800 text-white">
               <tr>
                 <th className="p-3 rounded-r-xl">الصنف</th>
@@ -586,7 +595,7 @@ export default function SalesPage() {
                     <input type="number" step="0.1" value={item.qty} onChange={(e) => updateItem(item.id, 'qty', e.target.value)} className="w-24 border rounded-lg px-2 text-xs font-bold font-mono h-10" />
                   </td>
                   <td className="p-2.5">
-                    <div className="flex items-center gap-1"><input type="number" step="0.5" value={item.price} onChange={(e) => updateItem(item.id, 'price', e.target.value)} className={`w-24 border rounded-lg px-2 text-xs font-bold font-mono h-10 ${Math.abs(deviationPct(item)) > 20 ? 'border-2 border-amber-500 bg-amber-50' : ''}`} />{Math.abs(deviationPct(item)) > 20 && <span className="text-[10px] font-bold text-amber-700">{deviationPct(item) > 0 ? '+' : ''}{deviationPct(item).toFixed(0)}%</span>}</div>
+                    <div className="flex items-center gap-1 flex-wrap"><input type="number" step="0.5" value={item.price} onChange={(e) => updateItem(item.id, 'price', e.target.value)} className={`w-24 border rounded-lg px-2 text-xs font-bold font-mono h-10 ${Math.abs(deviationPct(item)) > 20 ? 'border-2 border-amber-500 bg-amber-50' : ''}`} />{Math.abs(deviationPct(item)) > 20 && <span className="text-[10px] font-bold text-amber-700">{deviationPct(item) > 0 ? '+' : ''}{deviationPct(item).toFixed(0)}%</span>}</div>
                   </td>
                   <td className="p-2.5 font-mono font-bold text-emerald-700">
                     {(Number(item.qty || 0) * Number(item.price || 0)).toFixed(1)} ج
@@ -603,8 +612,8 @@ export default function SalesPage() {
           </button>
         </div>
 
-        <div className="flex flex-wrap justify-between items-center bg-slate-50 p-5 rounded-2xl border border-slate-200 gap-3">
-          <div className="flex gap-6">
+        <div className="flex flex-wrap justify-between items-center bg-slate-50 p-5 rounded-2xl border border-slate-200 gap-3 flex-wrap">
+          <div className="flex gap-6 flex-wrap">
             <div>
               <span className="text-xs font-bold text-slate-500">القيمة الإجمالية:</span>
               <p className="text-2xl font-black text-slate-900 font-mono">{grandTotal.toLocaleString()} ج</p>
@@ -621,7 +630,7 @@ export default function SalesPage() {
       </div>
     </div>
       <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-4 mt-6">
-        <div className="flex justify-between items-center border-b pb-3">
+        <div className="flex justify-between items-center border-b pb-3 flex-wrap gap-2 flex-wrap">
           <h2 className="text-sm font-bold text-slate-800">أحدث الفواتير المعتمدة</h2>
           <span className="text-xs text-slate-500">آخر 15 فاتورة</span>
         </div>
@@ -651,9 +660,9 @@ export default function SalesPage() {
       {invoiceDetail && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setInvoiceDetail(null)}>
           <div className="bg-white rounded-3xl max-w-3xl w-full shadow-2xl flex flex-col max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
-            <div className="bg-blue-50 p-5 border-b-2 border-blue-200 flex justify-between items-center rounded-t-3xl shrink-0">
+            <div className="bg-blue-50 p-5 border-b-2 border-blue-200 flex justify-between items-center rounded-t-3xl shrink-0 flex-wrap gap-2 flex-wrap">
               <div>
-                <h3 className="text-base font-bold text-blue-900 flex items-center gap-2">
+                <h3 className="text-base font-bold text-blue-900 flex items-center gap-2 flex-wrap">
                   {invoiceDetail.has_price_deviation && <AlertTriangle className="w-5 h-5 text-amber-500" />}
                   فاتورة {invoiceDetail.invoice_code || ('INV-' + invoiceDetail.id)}
                 </h3>
@@ -665,7 +674,7 @@ export default function SalesPage() {
             </div>
             <div className="overflow-y-auto p-5 space-y-4">
               {invoiceDetail.has_price_deviation && (
-                <div className="bg-gradient-to-l from-amber-50 to-amber-100 border-2 border-amber-300 rounded-2xl p-4 flex items-start gap-3">
+                <div className="bg-gradient-to-l from-amber-50 to-amber-100 border-2 border-amber-300 rounded-2xl p-4 flex items-start gap-3 flex-wrap">
                   <div className="bg-amber-500 p-2 rounded-xl shrink-0">
                     <AlertTriangle className="w-5 h-5 text-white" />
                   </div>
@@ -677,7 +686,7 @@ export default function SalesPage() {
                   </div>
                 </div>
               )}
-              <table className="w-full text-right text-xs">
+              <table className="w-full text-right text-xs min-w-[600px]">
                 <thead className="bg-slate-800 text-white">
                   <tr>
                     <th className="p-2">الصنف</th>
@@ -723,7 +732,7 @@ export default function SalesPage() {
       {showCancelModal && selectedInvoice && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 text-right">
-            <div className="flex items-center gap-2 text-rose-700 border-b pb-3">
+            <div className="flex items-center gap-2 text-rose-700 border-b pb-3 flex-wrap">
               <AlertTriangle className="w-6 h-6" />
               <h3 className="text-base font-bold">إلغاء الفاتورة {selectedInvoice.invoice_code || ('INV-' + selectedInvoice.id)}</h3>
             </div>
@@ -738,7 +747,7 @@ export default function SalesPage() {
               <label className="block text-xs font-bold text-slate-700 mb-1.5">سبب الإلغاء:</label>
               <input type="text" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} placeholder="سبب التسوية" className="w-full border-2 border-slate-200 rounded-xl px-3 bg-slate-50 h-11 text-sm" />
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <button onClick={handleCancelInvoice} disabled={!cancelReason.trim()} className="flex-1 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white font-bold py-2.5 rounded-xl text-xs">تأكيد الإلغاء</button>
               <button onClick={() => { setShowCancelModal(false); setSelectedInvoice(null); setCancelReason(''); }} className="bg-slate-100 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs">تراجع</button>
             </div>

@@ -145,9 +145,9 @@ export default function HelpPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-wrap justify-between items-center gap-3">
+      <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-wrap justify-between items-center gap-3 flex-wrap">
         <div>
-          <h1 className="text-xl font-black text-slate-900 flex items-center gap-2">
+          <h1 className="text-xl font-black text-slate-900 flex items-center gap-2 flex-wrap">
             <HelpCircle className="w-6 h-6 text-blue-600" />
             دليل التشغيل والمساعدة
           </h1>
@@ -155,30 +155,30 @@ export default function HelpPage() {
             كل ما تحتاجه لتشغيل النظام خطوة بخطوة
           </p>
         </div>
-        <button onClick={restartTour} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow">
+        <button onClick={restartTour} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow flex-wrap">
           <PlayCircle className="w-4 h-4" />
           <span>إعادة الجولة الإرشادية</span>
         </button>
       </div>
 
       {/* Quick stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-5 rounded-3xl border border-blue-200">
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
             <BookOpen className="w-5 h-5 text-blue-700" />
             <h3 className="text-sm font-black text-blue-900">9 أقسام</h3>
           </div>
           <p className="text-xs text-blue-700 font-bold">اضغط على أي قسم لتوسيعه</p>
         </div>
         <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 p-5 rounded-3xl border border-emerald-200">
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
             <TrendingUp className="w-5 h-5 text-emerald-700" />
             <h3 className="text-sm font-black text-emerald-900">دورة تشغيل كاملة</h3>
           </div>
           <p className="text-xs text-emerald-700 font-bold">من الشراء إلى التحصيل</p>
         </div>
         <div className="bg-gradient-to-br from-amber-50 to-amber-100 p-5 rounded-3xl border border-amber-200">
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
             <Shield className="w-5 h-5 text-amber-700" />
             <h3 className="text-sm font-black text-amber-900">حوكمة محاسبية</h3>
           </div>
@@ -195,9 +195,9 @@ export default function HelpPage() {
             <div key={s.key} className="bg-white rounded-3xl border-2 border-slate-200 overflow-hidden">
               <button
                 onClick={() => setExpanded(isOpen ? null : s.key)}
-                className="w-full p-5 flex items-center justify-between gap-3 hover:bg-slate-50 transition"
+                className="w-full p-5 flex items-center justify-between gap-3 hover:bg-slate-50 transition flex-wrap gap-2 flex-wrap"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                   <div className={'p-2.5 rounded-xl border ' + colorMap[s.color]}>
                     <Icon className="w-5 h-5" />
                   </div>
@@ -208,7 +208,7 @@ export default function HelpPage() {
               {isOpen && (
                 <div className="px-5 pb-5 space-y-3 border-t border-slate-100 pt-4">
                   {s.content.map((c, i) => (
-                    <div key={i} className="flex gap-3 items-start">
+                    <div key={i} className="flex gap-3 items-start flex-wrap">
                       <div className={'shrink-0 w-8 h-8 rounded-full border flex items-center justify-center text-xs font-black ' + colorMap[s.color]}>
                         {c.num}
                       </div>
@@ -234,7 +234,7 @@ export default function HelpPage() {
 
       {/* Footer hint */}
       <div className="bg-slate-100 border border-slate-200 p-5 rounded-3xl">
-        <div className="flex items-start gap-3">
+        <div className="flex items-start gap-3 flex-wrap">
           <AlertTriangle className="w-5 h-5 text-slate-500 shrink-0 mt-0.5" />
           <div>
             <h4 className="text-xs font-black text-slate-800 mb-1">هل تحتاج مساعدة إضافية؟</h4>

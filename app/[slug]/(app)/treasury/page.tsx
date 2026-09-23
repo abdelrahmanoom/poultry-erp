@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { getCurrentTenantId } from '@/lib/tenant-client';
 import { Wallet, Building2, UserCheck, Plus, X, RefreshCw, TrendingDown, TrendingUp, CheckCircle } from 'lucide-react';
 import DataTable from '@/components/DataTable';
 import Autocomplete from '@/components/Autocomplete';
@@ -49,6 +50,7 @@ export default function TreasuryPage() {
     const { data: treas } = await supabase
       .from('treasury_accounts')
       .select('*')
+      .eq('tenant_id', getCurrentTenantId())
       .eq('is_active', true)
       .order('treasury_code');
 
@@ -60,6 +62,7 @@ export default function TreasuryPage() {
     const { data: vous } = await supabase
       .from('financial_vouchers')
       .select('*')
+      .eq('tenant_id', getCurrentTenantId())
       .order('created_at', { ascending: false });
 
     if (vous) setVouchers(vous);
@@ -76,9 +79,9 @@ export default function TreasuryPage() {
     loadCustomersSuppliers(); loadData(); }, []);
 
   const loadCustomersSuppliers = async () => {
-    const { data: cust } = await supabase.from('customers').select('id, name, phone, balance').eq('is_active', true).order('name');
+    const { data: cust } = await supabase.from('customers').select('id, name, phone, balance').eq('tenant_id', getCurrentTenantId()).eq('is_active', true).order('name');
     if (cust) setCustomersList(cust);
-    const { data: supp } = await supabase.from('suppliers').select('id, name, phone, balance').eq('is_active', true).order('name');
+    const { data: supp } = await supabase.from('suppliers').select('id, name, phone, balance').eq('tenant_id', getCurrentTenantId()).eq('is_active', true).order('name');
     if (supp) setSuppliersList(supp);
   };
 
@@ -130,6 +133,7 @@ export default function TreasuryPage() {
 
       // 1. إيصال
       const { error: vErr } = await supabase.from('financial_vouchers').insert([{
+        tenant_id: getCurrentTenantId(),
         type: cashMovementType,
         entity_name: cashEntityName.trim(),
         amount: amt,
@@ -144,13 +148,13 @@ export default function TreasuryPage() {
         const cust = customersList.find((c: any) => c.name === cashEntityName.trim());
         if (cust) {
           const newBal = Math.max(0, Number(cust.balance || 0) - amt);
-          await supabase.from('customers').update({ balance: newBal }).eq('id', cust.id);
+          await supabase.from('customers').update({ balance: newBal }).eq('tenant_id', getCurrentTenantId()).eq('id', cust.id);
         }
       } else {
         const supp = suppliersList.find((s: any) => s.name === cashEntityName.trim());
         if (supp) {
           const newBal = Math.max(0, Number(supp.balance || 0) - amt);
-          await supabase.from('suppliers').update({ balance: newBal }).eq('id', supp.id);
+          await supabase.from('suppliers').update({ balance: newBal }).eq('tenant_id', getCurrentTenantId()).eq('id', supp.id);
         }
       }
 
@@ -176,7 +180,7 @@ export default function TreasuryPage() {
         phone: quickRegPhone.trim() || null,
         balance: 0,
         is_active: true,
-        tenant_id: 1,
+        tenant_id: getCurrentTenantId(),
       }]);
       if (error) throw error;
 
@@ -205,6 +209,7 @@ export default function TreasuryPage() {
     }
 
     const { error } = await supabase.from('financial_vouchers').insert([{
+      tenant_id: getCurrentTenantId(),
       type: 'expense',
       entity_name: entityName || 'مصروف تشغيلي',
       amount: Number(amount),
@@ -243,6 +248,7 @@ export default function TreasuryPage() {
 
     if (diff < 0) {
       await supabase.from('financial_vouchers').insert([{
+        tenant_id: getCurrentTenantId(),
         type: 'expense',
         entity_name: 'عجز في إقفال الوردية',
         amount: Math.abs(diff),
@@ -253,6 +259,7 @@ export default function TreasuryPage() {
       showToast(`تم تسجيل عجز بقيمة ${Math.abs(diff).toFixed(2)} ج`);
     } else {
       await supabase.from('financial_vouchers').insert([{
+        tenant_id: getCurrentTenantId(),
         type: 'receipt',
         entity_name: 'زيادة في إقفال الوردية',
         amount: diff,
@@ -333,7 +340,7 @@ export default function TreasuryPage() {
       {showCloseModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 text-right">
-            <div className="flex justify-between items-center border-b pb-3">
+            <div className="flex justify-between items-center border-b pb-3 flex-wrap gap-2 flex-wrap">
               <h3 className="text-base font-bold text-slate-800">إقفال الوردية ومطابقة الدرج</h3>
               <button onClick={() => setShowCloseModal(false)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
             </div>
@@ -350,7 +357,7 @@ export default function TreasuryPage() {
               </div>
 
               <div className="bg-slate-50 p-4 rounded-2xl border space-y-2">
-                <div className="flex justify-between text-sm font-bold">
+                <div className="flex justify-between text-sm font-bold flex-wrap gap-2 flex-wrap">
                   <span className="text-slate-600">الرصيد الدفتري:</span>
                   <span className="font-mono text-slate-800">
                     {Number(balances[closeTreasury || treasuries[0]?.treasury_code] || 0).toLocaleString()} ج
@@ -522,7 +529,7 @@ export default function TreasuryPage() {
                 <input type="text" value={closeNotes} onChange={(e) => setCloseNotes(e.target.value)} placeholder="سبب الفرق" className="w-full border-2 border-slate-200 rounded-xl px-4 text-xs font-bold bg-slate-50 h-11" />
               </div>
 
-              <div className="flex gap-2 pt-2">
+              <div className="flex gap-2 pt-2 flex-wrap">
                 <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-xs shadow">تأكيد الإقفال وتسجيل التسوية</button>
                 <button type="button" onClick={() => setShowCloseModal(false)} className="bg-slate-100 text-slate-700 font-bold px-5 rounded-xl text-xs">إلغاء</button>
               </div>
@@ -534,7 +541,7 @@ export default function TreasuryPage() {
       {showExpenseModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 text-right">
-            <div className="flex justify-between items-center border-b pb-3">
+            <div className="flex justify-between items-center border-b pb-3 flex-wrap gap-2 flex-wrap">
               <h3 className="text-base font-bold text-slate-800">تسجيل مصروف تشغيلي أو نثريات</h3>
               <button onClick={() => setShowExpenseModal(false)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
             </div>
@@ -561,7 +568,7 @@ export default function TreasuryPage() {
                 <label className="block text-xs font-bold text-slate-600 mb-1.5">البيان:</label>
                 <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="تفاصيل إضافية" className="w-full border-2 border-slate-200 rounded-xl px-4 text-xs font-bold bg-slate-50 h-11" />
               </div>
-              <div className="flex gap-2 pt-2">
+              <div className="flex gap-2 pt-2 flex-wrap">
                 <button type="submit" className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 rounded-xl text-xs shadow">إثبات الخروج النقدي</button>
                 <button type="button" onClick={() => setShowExpenseModal(false)} className="bg-slate-100 text-slate-700 font-bold px-5 rounded-xl text-xs">إلغاء</button>
               </div>
@@ -570,25 +577,25 @@ export default function TreasuryPage() {
         </div>
       )}
 
-      <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-wrap justify-between items-center gap-3">
+      <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-wrap justify-between items-center gap-3 flex-wrap">
         <div>
           <h1 className="text-xl font-bold text-slate-800">مركز السيولة والرقابة النقدية</h1>
           <p className="text-sm text-slate-500 font-bold mt-1">متابعة التدفقات النقدية وأرصدة كل خزينة على حدة</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <div className="bg-emerald-50 border border-emerald-200 px-5 py-2.5 rounded-2xl text-xs font-bold text-emerald-900">
             إجمالي السيولة المتاحة: <span className="font-mono text-base font-bold">{totalCash.toLocaleString()} ج</span>
           </div>
-          <button onClick={loadData} disabled={loading} className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs border flex items-center gap-2">
+          <button onClick={loadData} disabled={loading} className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs border flex items-center gap-2 flex-wrap">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             <span>تحديث</span>
           </button>
-          <button onClick={() => setShowCloseModal(true)} className="bg-slate-700 hover:bg-slate-800 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow">
+          <button onClick={() => setShowCloseModal(true)} className="bg-slate-700 hover:bg-slate-800 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow flex-wrap">
             <Wallet className="w-4 h-4" />
             <span>إقفال الوردية</span>
           </button>
-          <button onClick={() => openCashModal('receipt')} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow">             <TrendingDown className="w-4 h-4" />             <span>استلام نقدية</span>           </button>           <button onClick={() => openCashModal('payment')} className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow">             <TrendingUp className="w-4 h-4" />             <span>دفع نقدية</span>           </button>
-          <button onClick={() => setShowExpenseModal(true)} className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow">
+          <button onClick={() => openCashModal('receipt')} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow flex-wrap">             <TrendingDown className="w-4 h-4" />             <span>استلام نقدية</span>           </button>           <button onClick={() => openCashModal('payment')} className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow flex-wrap">             <TrendingUp className="w-4 h-4" />             <span>دفع نقدية</span>           </button>
+          <button onClick={() => setShowExpenseModal(true)} className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow flex-wrap">
             <Plus className="w-4 h-4" />
             <span>مصروف نثري</span>
           </button>
@@ -642,8 +649,8 @@ export default function TreasuryPage() {
 
   return (
             <div key={t.id} className="bg-white p-5 rounded-3xl border-2 border-slate-200">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap gap-2 flex-wrap">
+                <div className="flex items-center gap-3 flex-wrap">
                   <div className="w-11 h-11 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-700">
                     {getTreasuryIcon(t.account_type)}
                   </div>
@@ -677,7 +684,7 @@ export default function TreasuryPage() {
       {showCashModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => !savingCash && setShowCashModal(false)}>
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center border-b pb-3">
+            <div className="flex justify-between items-center border-b pb-3 flex-wrap gap-2 flex-wrap">
               <div>
                 <h3 className="text-base font-black text-slate-800">
                   {cashMovementType === 'receipt' ? 'استلام نقدية من عميل' : 'دفع نقدية لمورد'}
@@ -705,7 +712,7 @@ export default function TreasuryPage() {
                   className={'w-full border-2 rounded-xl px-3 h-11 text-sm font-bold ' + ((cashErrors.entity && (cashTouched.entity || cashSubmitted)) ? 'border-rose-400 bg-rose-50' : 'border-slate-200')}
                 />
                 {cashErrors.entity && (cashTouched.entity || cashSubmitted) && (
-                  <div className="mt-1 flex items-center justify-between gap-2">
+                  <div className="mt-1 flex items-center justify-between gap-2 flex-wrap gap-2 flex-wrap">
                     <p className="text-[11px] font-bold text-rose-600">⚠ {cashErrors.entity}</p>
                     {cashEntityName.trim() && !cashErrors.entity.includes('اختر') && (
                       <button onClick={() => { setQuickRegName(cashEntityName.trim()); setShowQuickRegister(true); }} className="text-[11px] font-bold text-blue-700 hover:text-blue-900 underline whitespace-nowrap">
@@ -755,7 +762,7 @@ export default function TreasuryPage() {
             </div>
 
             {/* أزرار */}
-            <div className="flex gap-2 pt-2">
+            <div className="flex gap-2 pt-2 flex-wrap">
               <button
                 onClick={handleCashMovement}
                 disabled={savingCash || Object.keys(cashErrors).length > 0}
@@ -775,7 +782,7 @@ export default function TreasuryPage() {
       {showQuickRegister && (
         <div className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => !registeringNew && setShowQuickRegister(false)}>
           <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center border-b pb-3">
+            <div className="flex justify-between items-center border-b pb-3 flex-wrap gap-2 flex-wrap">
               <div>
                 <h3 className="text-base font-black text-slate-800">
                   تسجيل {cashMovementType === 'receipt' ? 'عميل' : 'مورد'} جديد
@@ -798,7 +805,7 @@ export default function TreasuryPage() {
               </div>
             </div>
 
-            <div className="flex gap-2 pt-2">
+            <div className="flex gap-2 pt-2 flex-wrap">
               <button onClick={handleQuickRegister} disabled={registeringNew || !quickRegName.trim()} className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold py-3 rounded-xl text-sm flex items-center justify-center gap-2">
                 <CheckCircle className="w-4 h-4" />
                 <span>{registeringNew ? 'جاري التسجيل...' : 'سجّل ومتابعة'}</span>

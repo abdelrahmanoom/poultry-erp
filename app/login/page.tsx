@@ -44,9 +44,11 @@ export default function LoginPage() {
         username: data.user.username,
         full_name: data.user.full_name,
         role: data.user.role,
+        tenant_id: data.user.tenant_id,
         tenant_name: data.user.tenant_name,
         tenant_slug: userSlug,
         is_read_only: data.user.is_read_only || false,
+        must_change_password: data.user.must_change_password || false,
       }));
 
       router.push('/' + userSlug + '/dashboard');

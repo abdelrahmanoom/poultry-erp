@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { getCurrentTenantId } from '@/lib/tenant-client';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import EntityActions from '@/components/EntityActions';
 import DataTable from '@/components/DataTable';
@@ -37,22 +38,22 @@ export default function SupplierFilePage() {
 
   async function load() {
     setLoading(true);
-    let query = supabase.from('suppliers').select('*');
+    let query = supabase.from('suppliers').select('*').eq('tenant_id', getCurrentTenantId());
     if (/^\d+$/.test(codeParam)) query = query.eq('id', Number(codeParam));
     else query = query.eq('supplier_code', codeParam);
     const { data: s } = await query.maybeSingle();
     if (!s) { setLoading(false); return; }
     setSupplier(s);
-    const { data: bat } = await supabase.from('batches').select('*').eq('supplier_name', s.name).order('created_at', { ascending: false });
+    const { data: bat } = await supabase.from('batches').select('*').eq('tenant_id', getCurrentTenantId()).eq('supplier_name', s.name).order('created_at', { ascending: false });
     setBatches(bat || []);
-    const { data: pay } = await supabase.from('financial_vouchers').select('*').eq('entity_name', s.name).eq('type', 'payment').order('created_at', { ascending: false });
+    const { data: pay } = await supabase.from('financial_vouchers').select('*').eq('tenant_id', getCurrentTenantId()).eq('entity_name', s.name).eq('type', 'payment').order('created_at', { ascending: false });
     setPayments(pay || []);
     setLoading(false);
     loadTreasuries();
   }
 
   const loadTreasuries = async () => {
-    const { data } = await supabase.from('treasury_accounts').select('*').eq('is_active', true).order('treasury_code');
+    const { data } = await supabase.from('treasury_accounts').select('*').eq('tenant_id', getCurrentTenantId()).eq('is_active', true).order('treasury_code');
     if (data) setTreasuriesList(data);
     const { data: bals } = await supabase.rpc('get_treasury_balances');
     if (bals) {
@@ -78,12 +79,13 @@ export default function SupplierFilePage() {
         payment_method: 'cash',
         treasury_code: selectedTreasury,
         notes: paymentNotes.trim() || 'دفعة سداد للمورد',
+        tenant_id: getCurrentTenantId(),
       }]);
       if (vErr) throw vErr;
 
       // 2. تحديث رصيد المورد
       const newBalance = Math.max(0, Number(supplier.balance || 0) - amount);
-      const { error: sErr } = await supabase.from('suppliers').update({ balance: newBalance }).eq('id', supplier.id);
+      const { error: sErr } = await supabase.from('suppliers').update({ balance: newBalance }).eq('tenant_id', getCurrentTenantId()).eq('id', supplier.id);
       if (sErr) throw sErr;
 
       setShowPaymentModal(false);
@@ -101,7 +103,7 @@ export default function SupplierFilePage() {
   const openBatch = async (b: any) => {
     setBatchDetail(b);
     setYieldData(null);
-    const { data } = await supabase.from('yield_processing').select('*').eq('batch_id', b.id).maybeSingle();
+    const { data } = await supabase.from('yield_processing').select('*').eq('tenant_id', getCurrentTenantId()).eq('batch_id', b.id).maybeSingle();
     setYieldData(data || null);
   };
 
@@ -178,8 +180,8 @@ export default function SupplierFilePage() {
   if (loading) return (
     <div className="space-y-6">
       <div className="bg-white p-6 rounded-3xl border border-slate-200 animate-pulse">
-        <div className="flex justify-between items-start gap-4">
-          <div className="flex items-center gap-3">
+        <div className="flex justify-between items-start gap-4 flex-wrap gap-2 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
             <div className="w-10 h-10 bg-slate-200 rounded-xl"></div>
             <div className="space-y-2">
               <div className="h-5 w-40 bg-slate-200 rounded-lg"></div>
@@ -192,7 +194,7 @@ export default function SupplierFilePage() {
           </div>
         </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-4">
         {[1,2,3].map(i => (
           <div key={i} className="bg-white p-5 rounded-3xl border border-slate-200 animate-pulse space-y-3">
             <div className="h-3 w-24 bg-slate-200 rounded-lg"></div>
@@ -202,7 +204,7 @@ export default function SupplierFilePage() {
         ))}
       </div>
       <div className="bg-white p-5 rounded-3xl border border-slate-200 animate-pulse space-y-4">
-        <div className="flex gap-6 border-b pb-3">
+        <div className="flex gap-6 border-b pb-3 flex-wrap">
           <div className="h-4 w-24 bg-slate-200 rounded-lg"></div>
           <div className="h-4 w-20 bg-slate-200 rounded-lg"></div>
           <div className="h-4 w-24 bg-slate-200 rounded-lg"></div>
@@ -227,19 +229,19 @@ export default function SupplierFilePage() {
       <Breadcrumbs items={[{ label: 'الموردين', href: '/suppliers' }, { label: supplier.name }]} />
 
       <div className="bg-white p-6 rounded-3xl border border-slate-200">
-        <div className="flex flex-wrap justify-between items-start gap-4">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-wrap justify-between items-start gap-4 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
             <button onClick={() => router.back()} className="bg-slate-100 hover:bg-slate-200 p-2.5 rounded-xl"><ArrowRight className="w-4 h-4 text-slate-700" /></button>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-mono text-xs font-bold bg-slate-100 px-2 py-0.5 rounded-lg text-slate-600">{supplier.supplier_code || '—'}</span>
                 <h1 className="text-xl font-black text-slate-900">{supplier.name}</h1>
               </div>
-              {supplier.phone && <p className="text-xs text-slate-500 font-bold mt-1 flex items-center gap-1"><Phone className="w-3.5 h-3.5" /> {supplier.phone}</p>}
+              {supplier.phone && <p className="text-xs text-slate-500 font-bold mt-1 flex items-center gap-1 flex-wrap"><Phone className="w-3.5 h-3.5" /> {supplier.phone}</p>}
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <button onClick={() => setShowPaymentModal(true)} className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-3.5 h-10 rounded-xl text-xs flex items-center gap-1.5"><Wallet className="w-3.5 h-3.5" /><span>دفع للمورد</span></button>
+          <div className="flex items-center gap-3 flex-wrap">
+            <button onClick={() => setShowPaymentModal(true)} className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-3.5 h-10 rounded-xl text-xs flex items-center gap-1.5 flex-wrap"><Wallet className="w-3.5 h-3.5" /><span>دفع للمورد</span></button>
             <EntityActions entityType="supplier" entity={supplier} onRefresh={load} showArchive={false} />
             <div className="text-left">
               <span className="text-[10px] font-bold text-slate-400 block">الرصيد الحالي</span>
@@ -250,26 +252,26 @@ export default function SupplierFilePage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white p-5 rounded-3xl border border-slate-200">
-          <div className="flex items-center gap-2 text-slate-400 mb-2"><TrendingUp className="w-4 h-4" /><span className="text-xs font-bold">إجمالي التوريدات</span></div>
+          <div className="flex items-center gap-2 text-slate-400 mb-2 flex-wrap"><TrendingUp className="w-4 h-4" /><span className="text-xs font-bold">إجمالي التوريدات</span></div>
           <p className="text-2xl font-black font-mono text-slate-900">{totalSupplied.toLocaleString()} ج</p>
           <span className="text-[10px] font-bold text-slate-500">{batches.length} دفعة</span>
         </div>
         <div className="bg-white p-5 rounded-3xl border border-slate-200">
-          <div className="flex items-center gap-2 text-emerald-500 mb-2"><Wallet className="w-4 h-4" /><span className="text-xs font-bold">إجمالي السدادات</span></div>
+          <div className="flex items-center gap-2 text-emerald-500 mb-2 flex-wrap"><Wallet className="w-4 h-4" /><span className="text-xs font-bold">إجمالي السدادات</span></div>
           <p className="text-2xl font-black font-mono text-emerald-700">{totalPaid.toLocaleString()} ج</p>
           <span className="text-[10px] font-bold text-slate-500">{payments.length} إيصال</span>
         </div>
         <div className="bg-white p-5 rounded-3xl border border-slate-200">
-          <div className="flex items-center gap-2 text-slate-400 mb-2"><FileText className="w-4 h-4" /><span className="text-xs font-bold">متوسط التكلفة/كجم</span></div>
+          <div className="flex items-center gap-2 text-slate-400 mb-2 flex-wrap"><FileText className="w-4 h-4" /><span className="text-xs font-bold">متوسط التكلفة/كجم</span></div>
           <p className="text-2xl font-black font-mono text-slate-900">{avgCost.toFixed(2)} ج</p>
           <span className="text-[10px] font-bold text-slate-500">عبر {batches.length} دفعة</span>
         </div>
       </div>
 
       <div className="bg-white p-5 rounded-3xl border border-slate-200">
-        <div className="flex flex-wrap gap-6 border-b border-slate-200 text-xs font-black mb-4 pb-3">
+        <div className="flex flex-wrap gap-6 border-b border-slate-200 text-xs font-black mb-4 pb-3 flex-wrap">
           <button onClick={() => setActiveTab('batches')} className={'pb-2 ' + (activeTab === 'batches' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-400')}>التوريدات ({batches.length})</button>
           <button onClick={() => setActiveTab('payments')} className={'pb-2 ' + (activeTab === 'payments' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-400')}>المدفوعات ({payments.length})</button>
           <button onClick={() => setActiveTab('ledger')} className={'pb-2 ' + (activeTab === 'ledger' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-400')}>كشف الحساب</button>
@@ -322,7 +324,7 @@ export default function SupplierFilePage() {
       {batchDetail && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => { setBatchDetail(null); setYieldData(null); }}>
           <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[85vh] shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
-            <div className="bg-blue-50 p-5 border-b-2 border-blue-200 flex justify-between items-center rounded-t-3xl">
+            <div className="bg-blue-50 p-5 border-b-2 border-blue-200 flex justify-between items-center rounded-t-3xl flex-wrap gap-2 flex-wrap">
               <div>
                 <h3 className="text-base font-bold text-blue-900">دفعة {batchDetail.batch_code || batchDetail.id}</h3>
                 <p className="text-xs text-slate-600 mt-1">{new Date(batchDetail.created_at).toLocaleString('en-GB')}</p>
@@ -330,7 +332,7 @@ export default function SupplierFilePage() {
               <button onClick={() => { setBatchDetail(null); setYieldData(null); }} className="text-slate-500 hover:text-slate-800"><X className="w-5 h-5" /></button>
             </div>
             <div className="overflow-y-auto p-5 space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+              <div className="grid grid-cols-2 md:grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                 <div className="bg-slate-50 p-3 rounded-xl"><span className="text-slate-500 font-bold block text-[10px]">الوزن الحي</span><span className="font-mono font-bold">{Number(batchDetail.live_weight_kg).toFixed(0)} كجم</span></div>
                 <div className="bg-slate-50 p-3 rounded-xl"><span className="text-slate-500 font-bold block text-[10px]">سعر التنفيذ</span><span className="font-mono font-bold">{Number(batchDetail.execution_price).toFixed(2)} ج</span></div>
                 <div className="bg-slate-50 p-3 rounded-xl"><span className="text-slate-500 font-bold block text-[10px]">النقل</span><span className="font-mono font-bold">{Number(batchDetail.transport_cost || 0).toLocaleString()} ج</span></div>
@@ -341,7 +343,7 @@ export default function SupplierFilePage() {
               {yieldData && (
                 <div>
                   <h4 className="text-xs font-bold text-slate-700 mb-2">توزيع القطع المنتجة</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 md:grid-cols-2 sm:grid-cols-4 gap-2">
                     {Object.entries(yieldLabels).map(([key, label]: any) => {
                       const val = Number(yieldData[key] || 0);
                       if (val === 0) return null;
@@ -363,7 +365,7 @@ export default function SupplierFilePage() {
       {showPaymentModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => !savingPayment && setShowPaymentModal(false)}>
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center border-b pb-3">
+            <div className="flex justify-between items-center border-b pb-3 flex-wrap gap-2 flex-wrap">
               <div>
                 <h3 className="text-base font-black text-slate-800">دفعة سداد للمورد</h3>
                 <p className="text-xs text-slate-500 font-bold mt-0.5">{supplier?.name}</p>
@@ -398,7 +400,7 @@ export default function SupplierFilePage() {
               </div>
             </div>
 
-            <div className="flex gap-2 pt-2">
+            <div className="flex gap-2 pt-2 flex-wrap">
               <button onClick={handleSavePayment} disabled={savingPayment} className="flex-1 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold py-3 rounded-xl text-sm flex items-center justify-center gap-2">
                 <CheckCircle className="w-4 h-4" />
                 <span>{savingPayment ? 'جاري الحفظ...' : 'تأكيد الدفع'}</span>

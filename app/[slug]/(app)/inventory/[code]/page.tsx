@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { getCurrentTenantId } from '@/lib/tenant-client';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import EntityActions from '@/components/EntityActions';
 import DataTable from '@/components/DataTable';
@@ -28,14 +29,14 @@ export default function ProductFilePage() {
 
   async function load() {
     setLoading(true);
-    const { data: p } = await supabase.from('inventory').select('*').eq('product_code', codeParam).maybeSingle();
+    const { data: p } = await supabase.from('inventory').select('*').eq('tenant_id', getCurrentTenantId()).eq('product_code', codeParam).maybeSingle();
     if (!p) { setLoading(false); return; }
     setProduct(p);
-    const { data: l } = await supabase.from('inventory_lots').select('*').eq('product_code', codeParam).order('received_at', { ascending: false });
+    const { data: l } = await supabase.from('inventory_lots').select('*').eq('tenant_id', getCurrentTenantId()).eq('product_code', codeParam).order('received_at', { ascending: false });
     setLots(l || []);
-    const { data: s } = await supabase.from('sales_items').select('*, sales_invoices(created_at, customer_name, status, invoice_code)').eq('product_code', codeParam).order('id', { ascending: false }).limit(100);
+    const { data: s } = await supabase.from('sales_items').select('*, sales_invoices(created_at, customer_name, status, invoice_code)').eq('tenant_id', getCurrentTenantId()).eq('product_code', codeParam).order('id', { ascending: false }).limit(100);
     setSales((s || []).filter((x: any) => x.sales_invoices?.status !== 'cancelled'));
-    const { data: a } = await supabase.from('inventory_adjustments').select('*').eq('product_code', codeParam).order('created_at', { ascending: false });
+    const { data: a } = await supabase.from('inventory_adjustments').select('*').eq('tenant_id', getCurrentTenantId()).eq('product_code', codeParam).order('created_at', { ascending: false });
     setAdjustments(a || []);
     setLoading(false);
   }
@@ -118,18 +119,18 @@ export default function ProductFilePage() {
       <Breadcrumbs items={[{ label: 'المخزون', href: '/inventory' }, { label: product.product_name_ar }]} />
 
       <div className="bg-white p-6 rounded-3xl border border-slate-200">
-        <div className="flex flex-wrap justify-between items-start gap-4">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-wrap justify-between items-start gap-4 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
             <button onClick={() => router.back()} className="bg-slate-100 hover:bg-slate-200 p-2.5 rounded-xl"><ArrowRight className="w-4 h-4 text-slate-700" /></button>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-mono text-xs font-bold bg-slate-100 px-2 py-0.5 rounded-lg text-slate-600">{product.product_code}</span>
                 <h1 className="text-xl font-black text-slate-900">{product.product_name_ar}</h1>
               </div>
               <p className="text-xs text-slate-500 font-bold mt-1">المعامل: {product.pricing_value} × {product.pricing_type === 'multiplier' ? 'البورصة' : product.pricing_type}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <EntityActions entityType="product" entity={product} onRefresh={load} showArchive={false} />
             <div className="text-left">
               <span className="text-[10px] font-bold text-slate-400 block">المخزون الحالي</span>
@@ -139,31 +140,31 @@ export default function ProductFilePage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-3xl border border-slate-200">
-          <div className="flex items-center gap-2 text-slate-400 mb-2"><Package className="w-4 h-4" /><span className="text-xs font-bold">إجمالي الوارد</span></div>
+          <div className="flex items-center gap-2 text-slate-400 mb-2 flex-wrap"><Package className="w-4 h-4" /><span className="text-xs font-bold">إجمالي الوارد</span></div>
           <p className="text-xl font-black font-mono text-slate-900">{totalReceived.toFixed(1)} كجم</p>
           <span className="text-[10px] font-bold text-slate-500">{lots.length} دفعة</span>
         </div>
         <div className="bg-white p-5 rounded-3xl border border-slate-200">
-          <div className="flex items-center gap-2 text-slate-400 mb-2"><TrendingUp className="w-4 h-4" /><span className="text-xs font-bold">إجمالي المبيع</span></div>
+          <div className="flex items-center gap-2 text-slate-400 mb-2 flex-wrap"><TrendingUp className="w-4 h-4" /><span className="text-xs font-bold">إجمالي المبيع</span></div>
           <p className="text-xl font-black font-mono text-slate-900">{totalSold.toFixed(1)} كجم</p>
           <span className="text-[10px] font-bold text-slate-500">{sales.length} عملية</span>
         </div>
         <div className="bg-white p-5 rounded-3xl border border-slate-200">
-          <div className="flex items-center gap-2 text-slate-400 mb-2"><Wallet className="w-4 h-4" /><span className="text-xs font-bold">متوسط التكلفة</span></div>
+          <div className="flex items-center gap-2 text-slate-400 mb-2 flex-wrap"><Wallet className="w-4 h-4" /><span className="text-xs font-bold">متوسط التكلفة</span></div>
           <p className="text-xl font-black font-mono text-slate-900">{avgCost.toFixed(2)} ج</p>
           <span className="text-[10px] font-bold text-slate-500">FIFO موزون</span>
         </div>
         <div className="bg-white p-5 rounded-3xl border border-slate-200">
-          <div className="flex items-center gap-2 text-slate-400 mb-2"><TrendingUp className="w-4 h-4" /><span className="text-xs font-bold">صافي الربح</span></div>
+          <div className="flex items-center gap-2 text-slate-400 mb-2 flex-wrap"><TrendingUp className="w-4 h-4" /><span className="text-xs font-bold">صافي الربح</span></div>
           <p className={'text-xl font-black font-mono ' + (totalRevenue - totalCogs >= 0 ? 'text-emerald-700' : 'text-rose-600')}>{(totalRevenue - totalCogs).toLocaleString()} ج</p>
           <span className="text-[10px] font-bold text-slate-500">إيراد {totalRevenue.toLocaleString()} - COGS {totalCogs.toLocaleString()}</span>
         </div>
       </div>
 
       <div className="bg-white p-5 rounded-3xl border border-slate-200">
-        <div className="flex flex-wrap gap-6 border-b border-slate-200 text-xs font-black mb-4 pb-3">
+        <div className="flex flex-wrap gap-6 border-b border-slate-200 text-xs font-black mb-4 pb-3 flex-wrap">
           <button onClick={() => setActiveTab('lots')} className={'pb-2 ' + (activeTab === 'lots' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-400')}>الدفعات ({lots.length})</button>
           <button onClick={() => setActiveTab('sales')} className={'pb-2 ' + (activeTab === 'sales' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-400')}>المبيعات ({sales.length})</button>
           <button onClick={() => setActiveTab('adjustments')} className={'pb-2 ' + (activeTab === 'adjustments' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-400')}>التسويات ({adjustments.length})</button>

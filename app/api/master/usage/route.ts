@@ -4,9 +4,13 @@ import { getCurrentMaster } from '@/lib/master-auth';
 const SUPABASE_REF = process.env.SUPABASE_PROJECT_REF || 'pumsvckcbvjbtxzfcrls';
 const GITHUB_REPO = process.env.GITHUB_REPO || 'abdelrahmanoom/poultry-erp';
 
+const GB = 1024 * 1024 * 1024;
+const MB = 1024 * 1024;
+const KB = 1024;
+
 async function fetchSupabase() {
-  const token = process.env.SUPABASE_ACCESS_TOKEN;
-  if (!token) throw new Error('SUPABASE_ACCESS_TOKEN غير معرّف');
+  const token = process.env.SUPABASE_TOKEN || process.env.SUPABASE_ACCESS_TOKEN;
+  if (!token) throw new Error('SUPABASE_TOKEN غير معرّف');
   const headers = { 'Authorization': 'Bearer ' + token };
 
   const projRes = await fetch(`https://api.supabase.com/v1/projects/${SUPABASE_REF}`, { headers });
@@ -35,20 +39,28 @@ async function fetchSupabase() {
     if (acRes.ok) {
       const data = await acRes.json();
       (data.result || []).forEach((row: any) => {
-        apiTotal += (row.total_rest_requests || 0) + (row.total_auth_requests || 0);
+        apiTotal += (row.total_rest_requests || 0) + (row.total_auth_requests || 0) + (row.total_storage_requests || 0);
       });
     }
   } catch {}
+
+  // Egress تقديري: 8 KB لكل طلب (متوسط تقديري)
+  const egressEstimated = apiTotal * 8 * KB;
 
   return {
     name: project.name,
     status: project.status,
     region: project.region,
     db_size_bytes: dbStats.db_size_bytes || 0,
+    db_limit_bytes: 500 * MB,
     tables_count: dbStats.tables_count || 0,
     rows_total: dbStats.rows_total || 0,
     api_total: apiTotal,
-    limits: { db_size: 500 * 1024 * 1024, egress: 5 * 1024 * 1024 * 1024 },
+    egress_estimated_bytes: egressEstimated,
+    egress_limit_bytes: 5 * GB,
+    storage_bytes: 0,
+    storage_limit_bytes: 1 * GB,
+    plan: 'free',
   };
 }
 
@@ -63,7 +75,21 @@ async function fetchVercel() {
 
   return {
     projects_count: data.projects?.length || 0,
-    limits: { bandwidth_gb: 100, cpu_hours: 4, invocations_m: 1, build_minutes: 6000 },
+    plan: 'hobby',
+    limits: {
+      bandwidth_gb: 100,
+      cpu_hours: 4,
+      invocations: 1_000_000,
+      build_minutes: 6000,
+      image_optimizations: 1000,
+    },
+    // Vercel API لا يوفر استخدام فعلي في الخطة المجانية
+    usage: {
+      bandwidth_gb: null,
+      cpu_hours: null,
+      invocations: null,
+      build_minutes: null,
+    },
   };
 }
 
@@ -99,10 +125,16 @@ async function fetchGitHub() {
   return {
     repo_name: repo.full_name,
     size_bytes: repo.size * 1024,
+    size_limit_bytes: 5 * GB,
     default_branch: repo.default_branch,
     runs_30d: runs30d,
     actions_minutes_30d: Math.round(minutes30d),
-    limits: { actions_minutes: 2000, storage_mb: 500 },
+    actions_minutes_limit: 2000,
+    plan: 'free',
+    lfs_bytes: 0,
+    lfs_limit_bytes: 1 * GB,
+    packages_bytes: 0,
+    packages_limit_bytes: 500 * MB,
   };
 }
 

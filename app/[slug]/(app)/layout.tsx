@@ -8,6 +8,7 @@ import {
   Wallet, FileText, Settings, LogOut, Menu, X, HelpCircle
 } from 'lucide-react';
 import TourGuide from '@/components/TourGuide';
+import PasswordChangeModal from '@/components/PasswordChangeModal';
 import ReadOnlyBanner from '@/components/ReadOnlyBanner';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -16,6 +17,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [slug, setSlug] = useState('');
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [fromMaster, setFromMaster] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   const router = useRouter();
   const pathname = usePathname();
@@ -46,6 +48,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       // وضع القراءة فقط
       setIsReadOnly(parsed.is_read_only === true);
 
+      // فحص كلمة المرور الإلزامية
+      if (parsed.must_change_password === true) {
+        setShowPasswordModal(true);
+      }
+
       // هل جاء من Master؟
       if (document.cookie.includes('from_master=1')) {
         setFromMaster(true);
@@ -53,12 +60,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     } catch (e) {}
   }, [router, params]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (e) {}
+
     localStorage.removeItem('erp_user_display');
     localStorage.removeItem('erp_user_session');
     sessionStorage.removeItem('erp_user_display');
     sessionStorage.removeItem('erp_user_session');
-    router.push('/login');
+
+    window.location.href = '/login';
   };
 
   const navigation = [
@@ -87,7 +99,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Sidebar — desktop */}
       <aside className="hidden md:flex w-64 bg-slate-900 text-slate-200 flex-col shrink-0 border-l border-slate-800 shadow-xl z-30">
-        <div className="p-4 border-b border-slate-800 flex justify-between items-center">
+        <div className="p-4 border-b border-slate-800 flex justify-between items-center flex-wrap gap-2 flex-wrap">
           <div>
             <span className="font-black text-sm text-white block">{user?.tenant_name || 'منظومة الإدارة'}</span>
             <span className="text-[10px] text-emerald-400 font-bold">{user?.full_name || ''}</span>
@@ -111,13 +123,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </nav>
 
         {fromMaster && (
-          <a href="/master" className="block m-3 p-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-black flex items-center gap-2 transition">
+          <a href="/master" className="block m-3 p-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-black flex items-center gap-2 transition flex-wrap">
             <span>← عودة للماستر</span>
           </a>
         )}
 
         <div className="p-3 border-t border-slate-800">
-          <Link href={withSlug('/help')} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:bg-slate-800 hover:text-emerald-400 transition">
+          <Link href={withSlug('/help')} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:bg-slate-800 hover:text-emerald-400 transition flex-wrap">
             <HelpCircle className="w-4 h-4" />
             <span>المساعدة والدليل</span>
           </Link>
@@ -125,8 +137,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
 
       {/* Header — mobile */}
-      <header className="md:hidden bg-slate-900 text-white p-3 flex justify-between items-center sticky top-0 z-40 shadow">
-        <div className="flex items-center gap-2">
+      <header className="md:hidden bg-slate-900 text-white p-3 flex justify-between items-center sticky top-0 z-40 shadow flex-wrap gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           <button onClick={() => setDrawerOpen(true)} className="p-1.5 rounded-lg bg-slate-800">
             <Menu className="w-5 h-5 text-slate-200" />
           </button>
@@ -139,7 +151,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {drawerOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm md:hidden flex justify-start" onClick={() => setDrawerOpen(false)}>
           <div className="w-64 bg-slate-900 h-full p-4 space-y-4 text-slate-200 overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3 flex-wrap gap-2 flex-wrap">
               <span className="font-black text-sm">القائمة الرئيسية</span>
               <button onClick={() => setDrawerOpen(false)} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
             </div>
@@ -158,7 +170,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {fromMaster && (
               <a href="/master" className="block w-full text-center bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-black py-3 mt-2">← عودة للماستر</a>
             )}
-            <Link href={withSlug('/help')} onClick={() => setDrawerOpen(false)} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:bg-slate-800 hover:text-emerald-400 transition">
+            <Link href={withSlug('/help')} onClick={() => setDrawerOpen(false)} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:bg-slate-800 hover:text-emerald-400 transition flex-wrap">
               <HelpCircle className="w-4 h-4" />
               <span>المساعدة والدليل</span>
             </Link>
@@ -181,10 +193,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <Link href={withSlug('/production')} className={'flex flex-col items-center gap-1 ' + (isActive('/production') ? 'text-blue-500 font-extrabold' : '')}><Scissors className="w-4 h-4" /><span>الإنتاج</span></Link>
         <Link href={withSlug('/inventory')} className={'flex flex-col items-center gap-1 ' + (isActive('/inventory') ? 'text-blue-500 font-extrabold' : '')}><Warehouse className="w-4 h-4" /><span>المخازن</span></Link>
         <Link href={withSlug('/sales')} className={'flex flex-col items-center gap-1 ' + (isActive('/sales') ? 'text-blue-500 font-extrabold' : '')}><ShoppingCart className="w-4 h-4" /><span>المبيعات</span></Link>
-        <button onClick={() => setDrawerOpen(true)} className="flex flex-col items-center gap-1"><Menu className="w-4 h-4" /><span>المزيد</span></button>
+        <button onClick={() => setDrawerOpen(true)} className="flex flex-col items-center gap-1 flex-wrap"><Menu className="w-4 h-4" /><span>المزيد</span></button>
       </nav>
 
       <TourGuide />
+      {showPasswordModal && (
+        <PasswordChangeModal
+          forced={true}
+          onSuccess={() => {
+            localStorage.removeItem('erp_user_display');
+            sessionStorage.removeItem('erp_user_display');
+            window.location.href = '/login';
+          }}
+        />
+      )}
     </div>
   );
 }

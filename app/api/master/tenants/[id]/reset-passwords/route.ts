@@ -1,13 +1,10 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase/admin';
 import bcrypt from 'bcryptjs';
 import { getCurrentMaster } from '@/lib/master-auth';
 import { logAction, getRequestIp } from '@/lib/audit';
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+const supabaseAdmin = createAdminClient();
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const master = await getCurrentMaster();

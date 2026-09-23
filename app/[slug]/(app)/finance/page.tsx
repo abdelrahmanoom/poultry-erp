@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getCurrentTenantId } from '@/lib/tenant-client';
 import DataTable from '@/components/DataTable';
 import { Scale, FileSpreadsheet, Printer, Lock, RefreshCw, BarChart3, PieChart as PieChartIcon, TrendingUp, Download, Columns3, Search, X, AlertTriangle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
@@ -64,9 +65,9 @@ export default function ReportsPage() {
 
   const loadJournal = async () => {
     const to = dateTo + 'T23:59:59';
-    const { data: invs } = await supabase.from('sales_invoices').select('*').gte('created_at', dateFrom).lte('created_at', to);
-    const { data: bats } = await supabase.from('batches').select('*').gte('created_at', dateFrom).lte('created_at', to);
-    const { data: vous } = await supabase.from('financial_vouchers').select('*').gte('created_at', dateFrom).lte('created_at', to);
+    const { data: invs } = await supabase.from('sales_invoices').select('*').eq('tenant_id', getCurrentTenantId()).gte('created_at', dateFrom).lte('created_at', to);
+    const { data: bats } = await supabase.from('batches').select('*').eq('tenant_id', getCurrentTenantId()).gte('created_at', dateFrom).lte('created_at', to);
+    const { data: vous } = await supabase.from('financial_vouchers').select('*').eq('tenant_id', getCurrentTenantId()).gte('created_at', dateFrom).lte('created_at', to);
 
     // Preload deviations for invoices
     const devByInv: any = {};
@@ -76,6 +77,7 @@ export default function ReportsPage() {
         const { data: devItems } = await supabase
           .from('sales_items')
           .select('invoice_id, product_code, unit_price, price_deviation_percent')
+          .eq('tenant_id', getCurrentTenantId())
           .in('invoice_id', devIds)
           .neq('price_deviation_percent', 0);
         (devItems || []).forEach((it: any) => {
@@ -133,7 +135,7 @@ export default function ReportsPage() {
     const movements: any[] = [];
 
     if (code === '101') {
-      const { data } = await supabase.from('financial_vouchers').select('*').order('created_at', { ascending: false });
+      const { data } = await supabase.from('financial_vouchers').select('*').eq('tenant_id', getCurrentTenantId()).order('created_at', { ascending: false });
       (data || []).forEach((v: any) => {
         movements.push({
           date: v.created_at,
@@ -149,35 +151,35 @@ export default function ReportsPage() {
         });
       });
     } else if (code === '102') {
-      const { data } = await supabase.from('sales_invoices').select('*').order('created_at', { ascending: false });
+      const { data } = await supabase.from('sales_invoices').select('*').eq('tenant_id', getCurrentTenantId()).order('created_at', { ascending: false });
       (data || []).forEach((inv: any) => {
         movements.push({ date: inv.created_at, type: 'فاتورة مبيعات', entity: inv.customer_name, amount: Number(inv.total_amount), ref: inv.invoice_code || ('INV-' + inv.id), kind: 'invoice', srcId: inv.id });
       });
-      const { data: vouchers } = await supabase.from('financial_vouchers').select('*').eq('type', 'receipt').order('created_at', { ascending: false });
+      const { data: vouchers } = await supabase.from('financial_vouchers').select('*').eq('tenant_id', getCurrentTenantId()).eq('type', 'receipt').order('created_at', { ascending: false });
       (vouchers || []).forEach((v: any) => {
         movements.push({ date: v.created_at, type: 'تحصيل نقدي', entity: v.entity_name, amount: -Number(v.amount), ref: v.voucher_code || v.id, kind: 'voucher', srcId: v.id, notes: v.notes, payment_method: v.payment_method });
       });
     } else if (code === '103' || code === '501') {
-      const { data } = await supabase.from('batches').select('*').order('created_at', { ascending: false });
+      const { data } = await supabase.from('batches').select('*').eq('tenant_id', getCurrentTenantId()).order('created_at', { ascending: false });
       (data || []).forEach((b: any) => {
         movements.push({ date: b.created_at, type: code === '103' ? 'توريد للمخزون' : 'تكلفة شراء', entity: b.supplier_name, amount: Number(b.total_cost), ref: b.id, kind: 'batch', srcId: b.id });
       });
     } else if (code === '201') {
-      const { data } = await supabase.from('batches').select('*').order('created_at', { ascending: false });
+      const { data } = await supabase.from('batches').select('*').eq('tenant_id', getCurrentTenantId()).order('created_at', { ascending: false });
       (data || []).forEach((b: any) => {
         movements.push({ date: b.created_at, type: 'أمر توريد آجل', entity: b.supplier_name, amount: Number(b.total_cost), ref: b.id, kind: 'batch', srcId: b.id });
       });
-      const { data: vouchers } = await supabase.from('financial_vouchers').select('*').eq('type', 'payment').order('created_at', { ascending: false });
+      const { data: vouchers } = await supabase.from('financial_vouchers').select('*').eq('tenant_id', getCurrentTenantId()).eq('type', 'payment').order('created_at', { ascending: false });
       (vouchers || []).forEach((v: any) => {
         movements.push({ date: v.created_at, type: 'سداد نقدي', entity: v.entity_name, amount: -Number(v.amount), ref: v.voucher_code || v.id, kind: 'voucher', srcId: v.id, notes: v.notes, payment_method: v.payment_method });
       });
     } else if (code === '401') {
-      const { data } = await supabase.from('sales_invoices').select('*').order('created_at', { ascending: false });
+      const { data } = await supabase.from('sales_invoices').select('*').eq('tenant_id', getCurrentTenantId()).order('created_at', { ascending: false });
       (data || []).forEach((inv: any) => {
         movements.push({ date: inv.created_at, type: 'إيراد مبيعات', entity: inv.customer_name, amount: Number(inv.total_amount), ref: inv.invoice_code || ('INV-' + inv.id), kind: 'invoice', srcId: inv.id });
       });
     } else if (code === '502') {
-      const { data } = await supabase.from('financial_vouchers').select('*').eq('type', 'expense').order('created_at', { ascending: false });
+      const { data } = await supabase.from('financial_vouchers').select('*').eq('tenant_id', getCurrentTenantId()).eq('type', 'expense').order('created_at', { ascending: false });
       (data || []).forEach((v: any) => {
         movements.push({ date: v.created_at, type: 'مصروف تشغيلي', entity: v.entity_name, amount: Number(v.amount), ref: v.voucher_code || v.id, kind: 'voucher', srcId: v.id, notes: v.notes, payment_method: v.payment_method });
       });
@@ -192,7 +194,7 @@ export default function ReportsPage() {
     setMovementDetail(m);
     setMovementDetailItems([]);
     if (m.kind === 'invoice' && m.srcId) {
-      const { data } = await supabase.from('sales_items').select('*').eq('invoice_id', m.srcId);
+      const { data } = await supabase.from('sales_items').select('*').eq('tenant_id', getCurrentTenantId()).eq('invoice_id', m.srcId);
       if (data) setMovementDetailItems(data);
     }
   };
@@ -299,7 +301,7 @@ export default function ReportsPage() {
       const match = String(row.ref).match(/\d+/);
       const invId = match ? Number(match[0]) : null;
       if (invId) {
-        const { data } = await supabase.from('sales_items').select('*').eq('invoice_id', invId);
+        const { data } = await supabase.from('sales_items').select('*').eq('tenant_id', getCurrentTenantId()).eq('invoice_id', invId);
         if (data) setJournalDetailItems(data);
       }
     }
@@ -323,7 +325,7 @@ export default function ReportsPage() {
                 const pct = Number(d.price_deviation_percent || 0);
                 const expected = pct !== -100 ? actual / (1 + pct / 100) : 0;
                 return (
-                  <div key={k} className="grid grid-cols-3 gap-2 py-1 items-center">
+                  <div key={k} className="grid grid-cols-1 sm:grid-cols-3 gap-2 py-1 items-center">
                     <span className="text-slate-300 font-mono text-right">{d.product_code}</span>
                     <span className="font-mono text-center">
                       <span className="text-rose-300">{actual.toFixed(0)}</span>
@@ -417,7 +419,7 @@ export default function ReportsPage() {
       {selectedAccount && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setSelectedAccount(null)}>
           <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[85vh] shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="bg-blue-50 p-5 border-b-2 border-blue-200 flex justify-between items-center rounded-t-3xl">
+            <div className="bg-blue-50 p-5 border-b-2 border-blue-200 flex justify-between items-center rounded-t-3xl flex-wrap gap-2 flex-wrap">
               <div>
                 <h3 className="text-base font-bold text-blue-900">
                   <span className="font-mono bg-white px-3 py-1 rounded-lg ml-3">{selectedAccount.displayCode || selectedAccount.code}</span>
@@ -468,7 +470,7 @@ export default function ReportsPage() {
             <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-xs font-bold text-amber-900">
               تنبيه: هذا الإجراء لا يمكن التراجع عنه. تأكد من صحة البيانات قبل المتابعة.
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <button onClick={() => { setShowClosingModal(false); showToast('سيتم تفعيل إقفال السنة في التحديث القادم', 'error'); }} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-xs">تأكيد الإقفال</button>
               <button onClick={() => setShowClosingModal(false)} className="bg-slate-100 text-slate-700 font-bold px-5 rounded-xl text-xs">إلغاء</button>
             </div>
@@ -479,7 +481,7 @@ export default function ReportsPage() {
       {movementDetail && (
         <div className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setMovementDetail(null)}>
           <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[80vh] shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="bg-emerald-50 p-5 border-b-2 border-emerald-200 flex justify-between items-center rounded-t-3xl">
+            <div className="bg-emerald-50 p-5 border-b-2 border-emerald-200 flex justify-between items-center rounded-t-3xl flex-wrap gap-2 flex-wrap">
               <div>
                 <h3 className="text-base font-bold text-emerald-900">{movementDetail.type}</h3>
                 <p className="text-xs text-slate-600 mt-1">
@@ -525,7 +527,7 @@ export default function ReportsPage() {
               {movementDetailItems.length > 0 && (
                 <div>
                   <h4 className="text-xs font-bold text-slate-700 mb-2">بنود الفاتورة</h4>
-                  <table className="w-full text-right text-xs">
+                  <table className="w-full text-right text-xs min-w-[600px]">
                     <thead className="bg-slate-800 text-white">
                       <tr>
                         <th className="p-2">الصنف</th>
@@ -580,7 +582,7 @@ export default function ReportsPage() {
       {journalDetail && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setJournalDetail(null)}>
           <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="bg-blue-50 p-5 border-b-2 border-blue-200 flex justify-between items-center rounded-t-3xl">
+            <div className="bg-blue-50 p-5 border-b-2 border-blue-200 flex justify-between items-center rounded-t-3xl flex-wrap gap-2 flex-wrap">
               <div>
                 <h3 className="text-base font-bold text-blue-900">{journalDetail.type}</h3>
                 <p className="text-xs text-slate-600 mt-1">المرجع: <span className="font-mono font-bold">{journalDetail.ref}</span></p>
@@ -589,7 +591,7 @@ export default function ReportsPage() {
             </div>
             <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
               {journalDetail.has_dev && (
-                <div className="bg-gradient-to-l from-amber-50 to-amber-100 border-2 border-amber-300 rounded-2xl p-4 flex items-start gap-3">
+                <div className="bg-gradient-to-l from-amber-50 to-amber-100 border-2 border-amber-300 rounded-2xl p-4 flex items-start gap-3 flex-wrap">
                   <div className="bg-amber-500 p-2 rounded-xl shrink-0">
                     <AlertTriangle className="w-5 h-5 text-white" />
                   </div>
@@ -604,7 +606,7 @@ export default function ReportsPage() {
               {journalDetailDeviations.length > 0 && (
                 <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
                   <h4 className="text-xs font-bold text-amber-900 mb-3">تفاصيل الأسعار الشاذة</h4>
-                  <table className="w-full text-right text-xs">
+                  <table className="w-full text-right text-xs min-w-[600px]">
                     <thead className="bg-amber-100 text-amber-900">
                       <tr>
                         <th className="p-2">الصنف</th>
@@ -645,7 +647,7 @@ export default function ReportsPage() {
               {journalDetailItems.length > 0 && (
                 <div>
                   <h4 className="text-xs font-bold text-slate-700 mb-2">بنود الفاتورة</h4>
-                  <table className="w-full text-right text-xs">
+                  <table className="w-full text-right text-xs min-w-[600px]">
                     <thead className="bg-slate-800 text-white">
                       <tr>
                         <th className="p-2">الصنف</th>
@@ -675,12 +677,12 @@ export default function ReportsPage() {
         </div>
       )}
 
-<div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-wrap justify-between items-center gap-3">        <div>
+<div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-wrap justify-between items-center gap-3 flex-wrap">        <div>
           <h1 className="text-xl font-black text-slate-900">المركز المالي وميزان المراجعة الرقابي</h1>
           <p className="text-sm text-slate-500 font-bold mt-1">الرقابة المالية على توازن القيود والدفتر المالي العام وإقفال السنة</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={loadSummary} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow">
+        <div className="flex flex-wrap gap-2 flex-wrap">
+          <button onClick={loadSummary} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow flex-wrap">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             <span>تحديث البيانات</span>
           </button>
@@ -688,7 +690,7 @@ export default function ReportsPage() {
       </div>
 
       <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-6">
-        <div className="flex flex-wrap gap-4 border-b border-slate-200 text-xs font-black pb-3">
+        <div className="flex flex-wrap gap-4 border-b border-slate-200 text-xs font-black pb-3 flex-wrap">
           <button onClick={() => setActiveView('journal')} className={`pb-2 ${activeView === 'journal' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-400'}`}>سجل العمليات العام الموحد</button>
           <button onClick={() => setActiveView('trial_balance')} className={`pb-2 ${activeView === 'trial_balance' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-400'}`}>ميزان المراجعة التحليلي</button>
           <button onClick={() => setActiveView('pnl')} className={`pb-2 ${activeView === 'pnl' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-400'}`}>قائمة الأرباح والخسائر</button>
@@ -697,8 +699,8 @@ export default function ReportsPage() {
 
         {activeView === 'trial_balance' && (
           <div className="space-y-4">
-            <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs font-black">
-              <div className="flex items-center gap-2">
+            <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs font-black flex-wrap gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Scale className="w-5 h-5 text-blue-600" />
                 <span>حالة توازن ميزان المراجعة:</span>
                 {balanceDiff < 1 ? (
@@ -721,9 +723,9 @@ export default function ReportsPage() {
               onRowClick={(r: any) => openAccountDetails(r.code, r.name, r.displayCode)}
             />
 
-            <div className="bg-slate-100 rounded-2xl p-4 flex justify-between items-center font-bold text-sm mt-3">
+            <div className="bg-slate-100 rounded-2xl p-4 flex justify-between items-center font-bold text-sm mt-3 flex-wrap gap-2 flex-wrap">
               <span className="text-slate-700">الإجمالي المتوازن</span>
-              <div className="flex gap-6">
+              <div className="flex gap-6 flex-wrap">
                 <span className="text-emerald-800 font-mono">مدين: {totalDebit.toLocaleString()} ج</span>
                 <span className="text-emerald-800 font-mono">دائن: {totalCredit.toLocaleString()} ج</span>
               </div>
@@ -751,7 +753,7 @@ export default function ReportsPage() {
 
         {activeView === 'pnl' && (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+            <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-4 text-center">
               <div className="bg-emerald-50 p-5 rounded-3xl border border-emerald-200">
                 <span className="text-xs font-bold text-emerald-700 block mb-1">إجمالي الإيرادات المحققة</span>
                 <b className="text-2xl font-black text-emerald-950 font-mono">{Number(summary.total_revenue).toLocaleString()} ج</b>
@@ -767,14 +769,14 @@ export default function ReportsPage() {
             </div>
 
             <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-2 text-xs font-bold">
-              <div className="flex justify-between"><span>إجمالي الإيرادات:</span><span className="font-mono text-emerald-700">{Number(summary.total_revenue).toLocaleString()} ج</span></div>
-              <div className="flex justify-between"><span>مطروح: تكلفة البضاعة المباعة:</span><span className="font-mono text-rose-700">- {Number(summary.total_cogs).toLocaleString()} ج</span></div>
-              <div className="flex justify-between"><span>مطروح: المصروفات التشغيلية والنثريات:</span><span className="font-mono text-rose-700">- {Number(summary.total_expenses).toLocaleString()} ج</span></div>
-              <div className="flex justify-between border-t pt-2"><span>صافي النتيجة المالية:</span><span className="font-mono text-blue-800 text-sm">{Number(summary.net_profit).toLocaleString()} ج</span></div>
+              <div className="flex justify-between flex-wrap gap-2 flex-wrap"><span>إجمالي الإيرادات:</span><span className="font-mono text-emerald-700">{Number(summary.total_revenue).toLocaleString()} ج</span></div>
+              <div className="flex justify-between flex-wrap gap-2 flex-wrap"><span>مطروح: تكلفة البضاعة المباعة:</span><span className="font-mono text-rose-700">- {Number(summary.total_cogs).toLocaleString()} ج</span></div>
+              <div className="flex justify-between flex-wrap gap-2 flex-wrap"><span>مطروح: المصروفات التشغيلية والنثريات:</span><span className="font-mono text-rose-700">- {Number(summary.total_expenses).toLocaleString()} ج</span></div>
+              <div className="flex justify-between border-t pt-2 flex-wrap gap-2 flex-wrap"><span>صافي النتيجة المالية:</span><span className="font-mono text-blue-800 text-sm">{Number(summary.net_profit).toLocaleString()} ج</span></div>
             </div>
 
-            <div className="bg-slate-50 border-2 border-slate-200 p-5 rounded-3xl flex flex-wrap justify-between items-center gap-3">
-              <div className="flex items-center gap-3">
+            <div className="bg-slate-50 border-2 border-slate-200 p-5 rounded-3xl flex flex-wrap justify-between items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-3 flex-wrap">
                 <Lock className="w-8 h-8 text-slate-600" />
                 <div>
                   <h4 className="text-sm font-bold text-slate-800">معالج إقفال السنة المالية</h4>
@@ -792,7 +794,7 @@ export default function ReportsPage() {
           <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
               <div className="bg-white p-5 rounded-3xl border border-slate-200">
-                <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2 flex-wrap">
                   <PieChartIcon className="w-4 h-4 text-blue-600" />
                   <span>الأصناف الأكثر مبيعاً (كجم)</span>
                 </h3>
@@ -813,7 +815,7 @@ export default function ReportsPage() {
               </div>
 
               <div className="bg-white p-5 rounded-3xl border border-slate-200">
-                <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2 flex-wrap">
                   <BarChart3 className="w-4 h-4 text-emerald-600" />
                   <span>أهم العملاء (قيمة الشراء الإجمالية)</span>
                 </h3>
@@ -834,7 +836,7 @@ export default function ReportsPage() {
             </div>
 
             <div className="bg-white p-5 rounded-3xl border border-slate-200">
-              <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+              <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2 flex-wrap">
                 <TrendingUp className="w-4 h-4 text-blue-600" />
                 <span>تطور المبيعات اليومية</span>
               </h3>

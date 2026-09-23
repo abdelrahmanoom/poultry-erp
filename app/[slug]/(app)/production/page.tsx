@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getCurrentTenantId } from '@/lib/tenant-client';
 import { Scissors, CheckCircle, AlertTriangle, RefreshCw, Plus, Save } from 'lucide-react';
 import ProductFormModal from '@/components/ProductFormModal';
 import Autocomplete from '@/components/Autocomplete';
@@ -71,9 +72,9 @@ export default function ProductionPage() {
       const { data: settings } = await supabase.from('system_settings').select('*');
       if (settings) {
         const get = (k: string) => settings.find((s: any) => s.setting_key === k)?.setting_value;
-        const t = Number(get('transport_cost') || 3500);
-        const l = Number(get('labor_cost') || 700);
-        const b = Number(get('broker_cost') || 500);
+        const t = Number(get('default_transport_cost') || 0);
+        const l = Number(get('default_labor_cost') || 0);
+        const b = Number(get('default_broker_cost') || 0);
         setTransportCost(t);
         setLaborCost(l);
         setBrokerCost(b);
@@ -91,8 +92,8 @@ export default function ProductionPage() {
 
       const { data: priceData } = await supabase.from('market_prices').select('*').order('created_at', { ascending: false }).limit(1).maybeSingle();
       if (priceData) {
-        setMarketPrice(Number(priceData.exchange_price || 85));
-        setExecPrice(Number(priceData.execution_price || 83));
+        setMarketPrice(priceData.exchange_price ? Number(priceData.exchange_price) : '');
+        setExecPrice(priceData.execution_price ? Number(priceData.execution_price) : '');
       }
 
       const { data: paths } = await supabase.from('slaughter_pathways').select('*').eq('is_active', true).order('pathway_code');
@@ -101,7 +102,12 @@ export default function ProductionPage() {
         setPathway(paths[0].pathway_code);
       }
 
-      const { data: prods } = await supabase.from('inventory').select('product_code, product_name_ar, pricing_type, pricing_value, allocation_weight').eq('is_active', true).order('product_code');
+      const tid = getCurrentTenantId();
+      const { data: prods } = await supabase.from('inventory')
+        .select('product_code, product_name_ar, pricing_type, pricing_value, allocation_weight')
+        .eq('tenant_id', tid)
+        .eq('is_active', true)
+        .order('product_code');
       if (prods) setProductsCatalog(prods);
     }
     loadAll();
@@ -112,7 +118,7 @@ export default function ProductionPage() {
     async function loadPathwayProducts() {
       const buildVirtualList = () => productsCatalog.map((p: any) => ({
         product_code: p.product_code,
-        expected_ratio: Number(p.allocation_weight || 0),
+        expected_ratio: Number(p.allocation_weight || 0) / 100,
         _virtual: true,
       }));
 
@@ -138,6 +144,37 @@ export default function ProductionPage() {
   // ============ AUTO-CALCULATE QTY ============
   const getExpectedQty = (p: any) => Number(liveWeight) * Number(p.expected_ratio);
   const getActualQty = (p: any) => Number(actualQtys[p.product_code] || 0);
+
+  const saveLogisticsAsDefault = async () => {
+    try {
+      const t = Number(transportCost) || 0;
+      const l = Number(laborCost) || 0;
+      const b = Number(brokerCost) || 0;
+
+      const { data: userData } = await supabase.from('system_users').select('tenant_id').limit(1).maybeSingle();
+      const tenantId = userData?.tenant_id;
+      if (!tenantId) { showToast('تعذّر تحديد النشاط', 'error'); return; }
+
+      const items = [
+        { tenant_id: tenantId, setting_key: 'default_transport_cost', setting_value: String(t) },
+        { tenant_id: tenantId, setting_key: 'default_labor_cost', setting_value: String(l) },
+        { tenant_id: tenantId, setting_key: 'default_broker_cost', setting_value: String(b) },
+      ];
+
+      const { error } = await supabase.from('system_settings').upsert(items, { onConflict: 'tenant_id,setting_key' });
+      if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+      showToast('تم حفظ التكاليف كافتراضي');
+    } catch (e: any) {
+      showToast('خطأ: ' + e.message, 'error');
+    }
+  };
+
+  const resetLogistics = () => {
+    setTransportCost('');
+    setLaborCost('');
+    setBrokerCost('');
+    showToast('تم تصفير التكاليف');
+  };
 
   const handleQtyChange = (productCode: string, val: any) => {
     setActualQtys(prev => {
@@ -178,9 +215,9 @@ export default function ProductionPage() {
         if (m) nextNum = parseInt(m[1], 10) + 1;
       }
       const newCode = 'PW-' + String(nextNum).padStart(4, '0');
-      const { error: pwErr } = await supabase.from('slaughter_pathways').insert([{ pathway_code: newCode, name_ar: newPathwayName.trim(), yield_formula_json: {}, is_active: true, tenant_id: 1 }]);
+      const { error: pwErr } = await supabase.from('slaughter_pathways').insert([{ pathway_code: newCode, name_ar: newPathwayName.trim(), yield_formula_json: {}, is_active: true, tenant_id: getCurrentTenantId() }]);
       if (pwErr) throw pwErr;
-      const products = items.map((it: any) => ({ pathway_code: newCode, product_code: it.product_code, expected_ratio: it.qty / totalQty, tenant_id: 1 }));
+      const products = items.map((it: any) => ({ pathway_code: newCode, product_code: it.product_code, expected_ratio: it.qty / totalQty, tenant_id: getCurrentTenantId() }));
       const { error: ppErr } = await supabase.from('pathway_products').insert(products);
       if (ppErr) throw ppErr;
       setShowSavePathwayModal(false);
@@ -208,6 +245,7 @@ export default function ProductionPage() {
       // 1. batches
       const { error: batchErr } = await supabase.from('batches').insert([{
         id: batchId,
+        tenant_id: getCurrentTenantId(),
         supplier_name: supplierName.trim(),
         live_weight_kg: Number(liveWeight),
         execution_price: Number(execPrice),
@@ -224,6 +262,7 @@ export default function ProductionPage() {
       // 2. yield_processing
       const ypRow: any = {
         batch_id: batchId,
+        tenant_id: getCurrentTenantId(),
         pathway_code: pathway,
         total_actual_yield: actualYield,
         total_expected_yield: expectedYield,
@@ -264,7 +303,11 @@ export default function ProductionPage() {
         }]);
 
         // inventory.stock_kg
-        const { data: currentStock } = await supabase.from('inventory').select('stock_kg').eq('product_code', p.product_code).maybeSingle();
+        const { data: currentStock } = await supabase.from('inventory')
+          .select('stock_kg')
+          .eq('tenant_id', getCurrentTenantId())
+          .eq('product_code', p.product_code)
+          .maybeSingle();
         if (currentStock) {
           await supabase.from('inventory').update({
             stock_kg: Number(currentStock.stock_kg || 0) + qty,
@@ -312,9 +355,9 @@ export default function ProductionPage() {
         </div>
       )}
 
-      <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-wrap justify-between items-center gap-3">
+      <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-wrap justify-between items-center gap-3 flex-wrap">
         <div>
-          <h1 className="text-xl font-black text-slate-900 flex items-center gap-2">
+          <h1 className="text-xl font-black text-slate-900 flex items-center gap-2 flex-wrap">
             <Scissors className="w-5 h-5 text-slate-700" />
             أمر توريد وتجهيز جديد
           </h1>
@@ -328,7 +371,7 @@ export default function ProductionPage() {
           <label className="block text-xs font-bold text-slate-700 mb-2">مسار التقطيع:</label>
           {pathwaysList.length === 0 ? (
             <div className="bg-blue-50 border-2 border-blue-200 p-5 rounded-2xl space-y-3">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <div className="bg-blue-200 p-1.5 rounded-lg">
                   <AlertTriangle className="w-4 h-4 text-blue-800" />
                 </div>
@@ -339,7 +382,7 @@ export default function ProductionPage() {
                 <b className="text-blue-900"> "حفظ هذه الأصناف كمسار جديد" </b>
                 أسفل البطاقة لإنشاء مسار للاستخدام المستقبلي.
               </p>
-              <a href="/settings?tab=pathways&group=operations" className="inline-flex items-center gap-1.5 bg-white hover:bg-blue-100 text-blue-700 font-bold px-4 py-2.5 rounded-xl text-xs border-2 border-blue-300 transition">
+              <a href="/settings?tab=pathways&group=operations" className="inline-flex items-center gap-1.5 bg-white hover:bg-blue-100 text-blue-700 font-bold px-4 py-2.5 rounded-xl text-xs border-2 border-blue-300 transition flex-wrap">
                 <span>فتح مسارات التجهيز</span>
                 <span>←</span>
               </a>
@@ -357,7 +400,7 @@ export default function ProductionPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-4">
           {/* بيانات الدفعة */}
           <div className="bg-white p-5 rounded-3xl border border-slate-200 space-y-4">
             <h2 className="text-sm font-black text-slate-800 border-b pb-2">بيانات الدفعة</h2>
@@ -417,22 +460,41 @@ export default function ProductionPage() {
               <label className="block text-xs font-bold text-slate-700 mb-1">رسوم الوساطة التجارية (ج):</label>
               <input type="number" value={brokerCost} onChange={(e) => setBrokerCost(e.target.value)} className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold bg-slate-50 font-mono" />
             </div>
+
+              <div className="col-span-3 flex flex-wrap gap-2 pt-2 border-t border-slate-200 mt-2">
+                <button
+                  type="button"
+                  onClick={saveLogisticsAsDefault}
+                  className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-300 font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>حفظ كافتراضي</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={resetLogistics}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>تصفير</span>
+                </button>
+              </div>
             <div className="bg-slate-50 p-3 rounded-xl space-y-2 text-xs">
-              <div className="flex justify-between"><span className="font-bold text-slate-600">إجمالي التكلفة:</span><span className="font-mono font-black">{totalCost.toLocaleString()} ج</span></div>
-              <div className="flex justify-between"><span className="font-bold text-slate-600">تكلفة الكيلو الفعلي:</span><span className="font-mono font-black text-emerald-700">{effectiveKgCost.toFixed(2)} ج</span></div>
+              <div className="flex justify-between flex-wrap gap-2 flex-wrap"><span className="font-bold text-slate-600">إجمالي التكلفة:</span><span className="font-mono font-black">{totalCost.toLocaleString()} ج</span></div>
+              <div className="flex justify-between flex-wrap gap-2 flex-wrap"><span className="font-bold text-slate-600">تكلفة الكيلو الفعلي:</span><span className="font-mono font-black text-emerald-700">{effectiveKgCost.toFixed(2)} ج</span></div>
             </div>
           </div>
 
           {/* مخرجات التقطيع */}
           <div className="bg-white p-5 rounded-3xl border border-slate-200 space-y-3">
-            <div className="flex justify-between items-center border-b pb-2 flex-wrap gap-2">
-              <div className="flex items-center gap-2">
+            <div className="flex justify-between items-center border-b pb-2 flex-wrap gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-sm font-black text-slate-800">مخرجات التقطيع</h2>
               </div>
               <button
                 type="button"
                 onClick={() => setShowProductModal(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm flex-wrap"
               >
                 <Plus className="w-4 h-4" />
                 <span>صنف جديد</span>
@@ -442,14 +504,14 @@ export default function ProductionPage() {
             {/* إرشاد سياقي */}
             {pathwayProducts.some((p: any) => p._virtual) && (
               actualYield > 0 ? (
-                <div className="bg-emerald-50 border-2 border-emerald-200 p-3 rounded-xl text-xs font-bold text-emerald-900 flex items-start gap-2">
+                <div className="bg-emerald-50 border-2 border-emerald-200 p-3 rounded-xl text-xs font-bold text-emerald-900 flex items-start gap-2 flex-wrap">
                   <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" />
                   <div>
                     <b>ممتاز!</b> أدخلت أوزاناً فعلية. اضغط الزر الأخضر أسفل البطاقة لحفظها كمسار قابل لإعادة الاستخدام.
                   </div>
                 </div>
               ) : (
-                <div className="bg-blue-50 border-2 border-blue-200 p-3 rounded-xl text-xs font-bold text-blue-900 flex items-start gap-2">
+                <div className="bg-blue-50 border-2 border-blue-200 p-3 rounded-xl text-xs font-bold text-blue-900 flex items-start gap-2 flex-wrap">
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                   <div>
                     <b>ابدأ هنا:</b> أدخل الأوزان الفعلية لكل صنف من الحقول أدناه. بعد الإدخال يمكنك حفظ القائمة كمسار للاستخدام المستقبلي.
@@ -463,7 +525,7 @@ export default function ProductionPage() {
               </div>
             ) : (
               <>
-                <div className="text-[10px] font-bold text-slate-500 flex justify-between">
+                <div className="text-[10px] font-bold text-slate-500 flex justify-between flex-wrap gap-2 flex-wrap">
                   <span>المتوقع: {expectedYield.toFixed(1)} كجم</span>
                   <span>الفعلي: {actualYield.toFixed(1)} كجم</span>
                   <span className={Math.abs(varianceRatio) > 0.08 ? 'text-amber-700' : 'text-emerald-700'}>
@@ -483,7 +545,7 @@ export default function ProductionPage() {
                     const ratioStatus = !hasValue ? 'idle' : ratioDiff < 3 ? 'ok' : ratioDiff < 10 ? 'warn' : 'bad';
                     return (
                       <div key={p.product_code}>
-                        <label className="block text-xs font-bold text-slate-700 mb-1 flex justify-between">
+                        <label className="block text-xs font-bold text-slate-700 mb-1 flex justify-between flex-wrap gap-2 flex-wrap">
                           <span>{prod?.product_name_ar || p.product_code}</span>
                           <span className="font-mono">
                             {hasValue ? (
@@ -510,7 +572,7 @@ export default function ProductionPage() {
                     );
                   })}
                   </div>
-                  <div className="bg-slate-50 p-2 rounded-xl text-[10px] font-bold text-slate-600 flex justify-between">
+                  <div className="bg-slate-50 p-2 rounded-xl text-[10px] font-bold text-slate-600 flex justify-between flex-wrap gap-2 flex-wrap">
                     <span>النسب: {(totalRatios * 100).toFixed(1)}%</span>
                     <span>الفاقد: {((1 - totalRatios) * 100).toFixed(1)}%</span>
                     <span>الإنتاج: {yieldPercent.toFixed(1)}% من الحي</span>
@@ -520,7 +582,7 @@ export default function ProductionPage() {
                   <button
                     type="button"
                     onClick={() => setShowSavePathwayModal(true)}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-3 rounded-xl text-sm flex items-center justify-center gap-2 shadow mt-2"
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-3 rounded-xl text-sm flex items-center justify-center gap-2 shadow mt-2 flex-wrap"
                   >
                     <Save className="w-4 h-4" />
                     <span>حفظ هذه الأصناف كمسار جديد</span>
@@ -531,7 +593,7 @@ export default function ProductionPage() {
           </div>
         </div>
 
-        <button type="submit" disabled={loading || pathwaysList.length === 0} className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-black py-4 rounded-2xl text-sm shadow-lg flex items-center justify-center gap-2">
+        <button type="submit" disabled={loading || pathwaysList.length === 0} className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-black py-4 rounded-2xl text-sm shadow-lg flex items-center justify-center gap-2 flex-wrap">
           {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
           {loading ? 'جاري الحفظ...' : 'اعتماد أمر وحفظ الإنتاج'}
         </button>
@@ -540,7 +602,7 @@ export default function ProductionPage() {
       {showSavePathwayModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => !savingPathway && setShowSavePathwayModal(false)}>
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center border-b pb-3">
+            <div className="flex justify-between items-center border-b pb-3 flex-wrap gap-2 flex-wrap">
               <h3 className="text-base font-black text-slate-800">حفظ كمسار جديد</h3>
               <button onClick={() => setShowSavePathwayModal(false)} disabled={savingPathway} className="text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
             </div>
@@ -548,7 +610,7 @@ export default function ProductionPage() {
               <label className="block text-xs font-bold text-slate-700 mb-1">اسم المسار *</label>
               <input type="text" value={newPathwayName} onChange={(e) => setNewPathwayName(e.target.value)} placeholder="اسم المسار" className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold outline-none focus:border-emerald-500" autoFocus />
             </div>
-            <div className="flex gap-2 pt-2">
+            <div className="flex gap-2 pt-2 flex-wrap">
               <button onClick={handleSavePathway} disabled={savingPathway || !newPathwayName.trim()} className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold py-3 rounded-xl text-sm">{savingPathway ? 'جاري الحفظ...' : 'حفظ المسار'}</button>
               <button onClick={() => setShowSavePathwayModal(false)} disabled={savingPathway} className="bg-slate-100 text-slate-700 font-bold px-5 py-3 rounded-xl text-sm">إلغاء</button>
             </div>

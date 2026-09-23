@@ -1,12 +1,9 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getCurrentMaster } from '@/lib/master-auth';
 import { logAction, getRequestIp } from '@/lib/audit';
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+const supabaseAdmin = createAdminClient();
 
 const TABLES = [
   'archives', 'sales_items', 'yield_processing', 'ready_purchases',

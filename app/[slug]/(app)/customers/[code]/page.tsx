@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { getCurrentTenantId } from '@/lib/tenant-client';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import DataTable from '@/components/DataTable';
 import EntityActions from '@/components/EntityActions';
@@ -37,7 +38,7 @@ export default function CustomerFilePage() {
 
   async function load() {
     setLoading(true);
-    let query = supabase.from('customers').select('*');
+    let query = supabase.from('customers').select('*').eq('tenant_id', getCurrentTenantId());
     if (/^\d+$/.test(codeParam)) {
       query = query.eq('id', Number(codeParam));
     } else {
@@ -49,11 +50,13 @@ export default function CustomerFilePage() {
     const id = c.id;
     const { data: inv } = await supabase
       .from('sales_invoices').select('*')
+      .eq('tenant_id', getCurrentTenantId())
       .or(`customer_id.eq.${id},customer_name.eq.${c.name}`)
       .order('created_at', { ascending: false });
     setInvoices(inv || []);
     const { data: rec } = await supabase
       .from('financial_vouchers').select('*')
+      .eq('tenant_id', getCurrentTenantId())
       .eq('entity_name', c.name).eq('type', 'receipt')
       .order('created_at', { ascending: false });
     setReceipts(rec || []);
@@ -62,7 +65,7 @@ export default function CustomerFilePage() {
   }
 
   const loadTreasuries = async () => {
-    const { data } = await supabase.from('treasury_accounts').select('*').eq('is_active', true).order('treasury_code');
+    const { data } = await supabase.from('treasury_accounts').select('*').eq('tenant_id', getCurrentTenantId()).eq('is_active', true).order('treasury_code');
     if (data) setTreasuriesList(data);
     const { data: bals } = await supabase.rpc('get_treasury_balances');
     if (bals) {
@@ -88,13 +91,13 @@ export default function CustomerFilePage() {
         payment_method: 'cash',
         treasury_code: selectedTreasury,
         notes: paymentNotes.trim() || 'تحصيل دفعة من العميل',
-        tenant_id: customer.tenant_id || 1,
+        tenant_id: getCurrentTenantId(),
       }]);
       if (vErr) throw vErr;
 
       // 2. تحديث رصيد العميل
       const newBalance = Math.max(0, Number(customer.balance || 0) - amount);
-      const { error: cErr } = await supabase.from('customers').update({ balance: newBalance }).eq('id', customer.id);
+      const { error: cErr } = await supabase.from('customers').update({ balance: newBalance }).eq('tenant_id', getCurrentTenantId()).eq('id', customer.id);
       if (cErr) throw cErr;
 
       // 3. تحديث الحالة
@@ -114,7 +117,7 @@ export default function CustomerFilePage() {
   const openInvoice = async (inv: any) => {
     setInvoiceDetail(inv);
     setInvoiceItems([]);
-    const { data } = await supabase.from('sales_items').select('*').eq('invoice_id', inv.id);
+    const { data } = await supabase.from('sales_items').select('*').eq('tenant_id', getCurrentTenantId()).eq('invoice_id', inv.id);
     setInvoiceItems(data || []);
   };
 
@@ -136,7 +139,7 @@ export default function CustomerFilePage() {
   // Columns
   const invoiceColumns = [
     { key: 'invoice_code', label: 'رقم الفاتورة', searchable: true, exportValue: (i: any) => i.invoice_code || 'INV-' + i.id,
-      render: (i: any) => <span className="font-mono font-bold text-blue-700 inline-flex items-center gap-1">{i.has_price_deviation && <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />}{i.invoice_code || 'INV-' + i.id}</span> },
+      render: (i: any) => <span className="font-mono font-bold text-blue-700 inline-flex items-center gap-1 flex-wrap">{i.has_price_deviation && <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />}{i.invoice_code || 'INV-' + i.id}</span> },
     { key: 'created_at', label: 'التاريخ', exportValue: (i: any) => new Date(i.created_at).toLocaleDateString('en-GB'),
       render: (i: any) => <span className="font-mono text-slate-500">{new Date(i.created_at).toLocaleDateString('en-GB')}</span> },
     { key: 'total_amount', label: 'الإجمالي (ج)', exportValue: (i: any) => Number(i.total_amount || 0),
@@ -200,8 +203,8 @@ export default function CustomerFilePage() {
   if (loading) return (
     <div className="space-y-6">
       <div className="bg-white p-6 rounded-3xl border border-slate-200 animate-pulse">
-        <div className="flex justify-between items-start gap-4">
-          <div className="flex items-center gap-3">
+        <div className="flex justify-between items-start gap-4 flex-wrap gap-2 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
             <div className="w-10 h-10 bg-slate-200 rounded-xl"></div>
             <div className="space-y-2">
               <div className="h-5 w-40 bg-slate-200 rounded-lg"></div>
@@ -214,7 +217,7 @@ export default function CustomerFilePage() {
           </div>
         </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-4">
         {[1,2,3].map(i => (
           <div key={i} className="bg-white p-5 rounded-3xl border border-slate-200 animate-pulse space-y-3">
             <div className="h-3 w-24 bg-slate-200 rounded-lg"></div>
@@ -224,7 +227,7 @@ export default function CustomerFilePage() {
         ))}
       </div>
       <div className="bg-white p-5 rounded-3xl border border-slate-200 animate-pulse space-y-4">
-        <div className="flex gap-6 border-b pb-3">
+        <div className="flex gap-6 border-b pb-3 flex-wrap">
           <div className="h-4 w-24 bg-slate-200 rounded-lg"></div>
           <div className="h-4 w-20 bg-slate-200 rounded-lg"></div>
           <div className="h-4 w-24 bg-slate-200 rounded-lg"></div>
@@ -249,18 +252,18 @@ export default function CustomerFilePage() {
       <Breadcrumbs items={[{ label: 'العملاء', href: '/customers' }, { label: customer.name }]} />
 
       <div className="bg-white p-6 rounded-3xl border border-slate-200">
-        <div className="flex flex-wrap justify-between items-start gap-4">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-wrap justify-between items-start gap-4 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
             <button onClick={() => router.back()} className="bg-slate-100 hover:bg-slate-200 p-2.5 rounded-xl"><ArrowRight className="w-4 h-4 text-slate-700" /></button>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-mono text-xs font-bold bg-slate-100 px-2 py-0.5 rounded-lg text-slate-600">{customer.customer_code || '—'}</span>
                 <h1 className="text-xl font-black text-slate-900">{customer.name}</h1>
               </div>
-              {customer.phone && <p className="text-xs text-slate-500 font-bold mt-1 flex items-center gap-1"><Phone className="w-3.5 h-3.5" /> {customer.phone}</p>}
+              {customer.phone && <p className="text-xs text-slate-500 font-bold mt-1 flex items-center gap-1 flex-wrap"><Phone className="w-3.5 h-3.5" /> {customer.phone}</p>}
             </div>
           </div>
-          <div className="flex items-center gap-3"><button onClick={() => setShowPaymentModal(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 h-10 rounded-xl text-xs flex items-center gap-1.5"><Wallet className="w-3.5 h-3.5" /><span>تحصيل دفعة</span></button><EntityActions entityType="customer" entity={customer} onRefresh={load} showArchive={false} /><div className="text-left">
+          <div className="flex items-center gap-3 flex-wrap"><button onClick={() => setShowPaymentModal(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 h-10 rounded-xl text-xs flex items-center gap-1.5 flex-wrap"><Wallet className="w-3.5 h-3.5" /><span>تحصيل دفعة</span></button><EntityActions entityType="customer" entity={customer} onRefresh={load} showArchive={false} /><div className="text-left">
             <span className="text-[10px] font-bold text-slate-400 block">الرصيد الحالي</span>
             <span className={'text-2xl font-black font-mono ' + (currentBalance > 0 ? 'text-rose-600' : 'text-emerald-600')}>{currentBalance.toLocaleString()} ج</span>
             <span className="text-[10px] font-bold text-slate-500 block mt-0.5">{currentBalance > 0 ? '⚠️ مديونية قائمة' : '✅ لا مديونيات'}</span>
@@ -269,26 +272,26 @@ export default function CustomerFilePage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white p-5 rounded-3xl border border-slate-200">
-          <div className="flex items-center gap-2 text-slate-400 mb-2"><TrendingUp className="w-4 h-4" /><span className="text-xs font-bold">إجمالي المشتريات</span></div>
+          <div className="flex items-center gap-2 text-slate-400 mb-2 flex-wrap"><TrendingUp className="w-4 h-4" /><span className="text-xs font-bold">إجمالي المشتريات</span></div>
           <p className="text-2xl font-black font-mono text-slate-900">{totalSales.toLocaleString()} ج</p>
           <span className="text-[10px] font-bold text-slate-500">{invoices.filter(i => i.status !== 'cancelled').length} فاتورة</span>
         </div>
         <div className="bg-white p-5 rounded-3xl border border-slate-200">
-          <div className="flex items-center gap-2 text-emerald-500 mb-2"><Wallet className="w-4 h-4" /><span className="text-xs font-bold">إجمالي المدفوعات</span></div>
+          <div className="flex items-center gap-2 text-emerald-500 mb-2 flex-wrap"><Wallet className="w-4 h-4" /><span className="text-xs font-bold">إجمالي المدفوعات</span></div>
           <p className="text-2xl font-black font-mono text-emerald-700">{totalPaid.toLocaleString()} ج</p>
           <span className="text-[10px] font-bold text-slate-500">{receipts.length} إيصال</span>
         </div>
         <div className="bg-white p-5 rounded-3xl border border-slate-200">
-          <div className="flex items-center gap-2 text-slate-400 mb-2"><FileText className="w-4 h-4" /><span className="text-xs font-bold">سقف الائتمان</span></div>
+          <div className="flex items-center gap-2 text-slate-400 mb-2 flex-wrap"><FileText className="w-4 h-4" /><span className="text-xs font-bold">سقف الائتمان</span></div>
           <p className="text-2xl font-black font-mono text-slate-900">{Number(customer.credit_limit || 0).toLocaleString()} ج</p>
           <span className="text-[10px] font-bold text-slate-500">متاح: {Math.max(0, Number(customer.credit_limit || 0) - currentBalance).toLocaleString()} ج</span>
         </div>
       </div>
 
       <div className="bg-white p-5 rounded-3xl border border-slate-200">
-        <div className="flex flex-wrap gap-6 border-b border-slate-200 text-xs font-black mb-4 pb-3">
+        <div className="flex flex-wrap gap-6 border-b border-slate-200 text-xs font-black mb-4 pb-3 flex-wrap">
           <button onClick={() => setActiveTab('invoices')} className={'pb-2 ' + (activeTab === 'invoices' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-400')}>الفواتير ({invoices.length})</button>
           <button onClick={() => setActiveTab('receipts')} className={'pb-2 ' + (activeTab === 'receipts' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-400')}>الإيصالات ({receipts.length})</button>
           <button onClick={() => setActiveTab('ledger')} className={'pb-2 ' + (activeTab === 'ledger' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-400')}>كشف الحساب</button>
@@ -342,7 +345,7 @@ export default function CustomerFilePage() {
       {invoiceDetail && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setInvoiceDetail(null)}>
           <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[85vh] shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
-            <div className="bg-blue-50 p-5 border-b-2 border-blue-200 flex justify-between items-center rounded-t-3xl">
+            <div className="bg-blue-50 p-5 border-b-2 border-blue-200 flex justify-between items-center rounded-t-3xl flex-wrap gap-2 flex-wrap">
               <div>
                 <h3 className="text-base font-bold text-blue-900">فاتورة {invoiceDetail.invoice_code || 'INV-' + invoiceDetail.id}</h3>
                 <p className="text-xs text-slate-600 mt-1">{new Date(invoiceDetail.created_at).toLocaleString('en-GB')}</p>
@@ -373,7 +376,7 @@ export default function CustomerFilePage() {
       {showPaymentModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => !savingPayment && setShowPaymentModal(false)}>
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center border-b pb-3">
+            <div className="flex justify-between items-center border-b pb-3 flex-wrap gap-2 flex-wrap">
               <div>
                 <h3 className="text-base font-black text-slate-800">تحصيل دفعة من العميل</h3>
                 <p className="text-xs text-slate-500 font-bold mt-0.5">{customer?.name}</p>
@@ -408,7 +411,7 @@ export default function CustomerFilePage() {
               </div>
             </div>
 
-            <div className="flex gap-2 pt-2">
+            <div className="flex gap-2 pt-2 flex-wrap">
               <button onClick={handleSavePayment} disabled={savingPayment} className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold py-3 rounded-xl text-sm flex items-center justify-center gap-2">
                 <CheckCircle className="w-4 h-4" />
                 <span>{savingPayment ? 'جاري الحفظ...' : 'تأكيد التحصيل'}</span>

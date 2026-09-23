@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { getCurrentTenantId } from '@/lib/tenant-client';
 import DataTable from '@/components/DataTable';
 import * as XLSX from 'xlsx';
 import { Wallet, History, TrendingDown, TrendingUp, Download, ExternalLink } from 'lucide-react';
@@ -30,12 +31,12 @@ export default function SuppliersPage() {
   };
 
   const loadTreasuries = async () => {
-    const { data: treas } = await supabase.from('treasury_accounts').select('*').eq('is_active', true).order('treasury_code');
+    const { data: treas } = await supabase.from('treasury_accounts').select('*').eq('tenant_id', getCurrentTenantId()).eq('is_active', true).order('treasury_code');
     if (treas) {
       setTreasuries(treas);
       if (!selectedTreasury && treas.length > 0) setSelectedTreasury(treas[0].treasury_code);
 
-      const { data: vous } = await supabase.from('financial_vouchers').select('treasury_code, type, amount');
+      const { data: vous } = await supabase.from('financial_vouchers').select('treasury_code, type, amount').eq('tenant_id', getCurrentTenantId());
       if (vous) {
         const bals: any = {};
         treas.forEach((t: any) => bals[t.treasury_code] = 0);
@@ -52,15 +53,15 @@ export default function SuppliersPage() {
   };
 
   const loadSuppliers = async () => {
-    const { data } = await supabase.from('suppliers').select('*').order('balance', { ascending: false });
+    const { data } = await supabase.from('suppliers').select('*').eq('tenant_id', getCurrentTenantId()).order('balance', { ascending: false });
     if (data) setSuppliers(data);
   };
 
   useEffect(() => { loadSuppliers(); loadTreasuries(); }, []);
 
   const buildLedger = async (supp: any) => {
-    const { data: batches } = await supabase.from('batches').select('*').eq('supplier_name', supp.name).order('created_at');
-    const { data: vous } = await supabase.from('financial_vouchers').select('*').eq('entity_name', supp.name).eq('type', 'payment').order('created_at');
+    const { data: batches } = await supabase.from('batches').select('*').eq('tenant_id', getCurrentTenantId()).eq('supplier_name', supp.name).order('created_at');
+    const { data: vous } = await supabase.from('financial_vouchers').select('*').eq('tenant_id', getCurrentTenantId()).eq('entity_name', supp.name).eq('type', 'payment').order('created_at');
 
     const movements: any[] = [];
 
@@ -113,7 +114,7 @@ export default function SuppliersPage() {
 
   const refreshSupplier = async () => {
     if (!selectedSupp) return;
-    const { data: fresh } = await supabase.from('suppliers').select('*').eq('id', selectedSupp.id).maybeSingle();
+    const { data: fresh } = await supabase.from('suppliers').select('*').eq('tenant_id', getCurrentTenantId()).eq('id', selectedSupp.id).maybeSingle();
     if (fresh) {
       setSelectedSupp(fresh);
       await buildLedger(fresh);
@@ -136,6 +137,7 @@ export default function SuppliersPage() {
     }
 
     const { error } = await supabase.from('financial_vouchers').insert([{
+      tenant_id: getCurrentTenantId(),
       type: 'payment',
       entity_name: selectedSupp.name,
       amount: Number(payoutAmount),
@@ -147,7 +149,7 @@ export default function SuppliersPage() {
     if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
 
     const newBalance = Math.max(0, currentBal - Number(payoutAmount));
-    await supabase.from('suppliers').update({ balance: newBalance }).eq('id', selectedSupp.id);
+    await supabase.from('suppliers').update({ balance: newBalance }).eq('tenant_id', getCurrentTenantId()).eq('id', selectedSupp.id);
 
     setPayoutAmount('');
     await refreshSupplier();
@@ -157,8 +159,8 @@ export default function SuppliersPage() {
   };
 
   const openBatchDetails = async (batchId: string) => {
-    const { data: b } = await supabase.from('batches').select('*').eq('id', batchId).maybeSingle();
-    const { data: yp } = await supabase.from('yield_processing').select('*').eq('batch_id', batchId).maybeSingle();
+    const { data: b } = await supabase.from('batches').select('*').eq('tenant_id', getCurrentTenantId()).eq('id', batchId).maybeSingle();
+    const { data: yp } = await supabase.from('yield_processing').select('*').eq('tenant_id', getCurrentTenantId()).eq('batch_id', batchId).maybeSingle();
     setBatchModal({ batch: b, yield: yp });
   };
 
@@ -232,7 +234,7 @@ export default function SuppliersPage() {
       {batchModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 text-right">
-            <div className="flex justify-between items-center border-b pb-2">
+            <div className="flex justify-between items-center border-b pb-2 flex-wrap gap-2 flex-wrap">
               <h3 className="text-base font-black text-blue-900">تفاصيل أمر التوريد {batchModal.batch?.id}</h3>
               <button onClick={() => setBatchModal(null)} className="text-slate-400 font-bold text-sm">إغلاق</button>
             </div>
@@ -277,7 +279,7 @@ export default function SuppliersPage() {
             {batchModal.yield && (
               <div className="bg-slate-50 p-4 rounded-xl text-xs">
                 <h4 className="font-black text-slate-800 mb-2">نتائج التشفية:</h4>
-                <div className="grid grid-cols-3 gap-2 font-mono">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono">
                   <div>بانيه: {Number(batchModal.yield.actual_fillet).toFixed(1)} كجم</div>
                   <div>وراك: {Number(batchModal.yield.actual_thighs).toFixed(1)} كجم</div>
                   <div>أجنحة: {Number(batchModal.yield.actual_wings).toFixed(1)} كجم</div>
@@ -291,7 +293,7 @@ export default function SuppliersPage() {
         </div>
       )}
 
-      <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-wrap justify-between items-center gap-3">
+      <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-wrap justify-between items-center gap-3 flex-wrap">
         <div>
           <h1 className="text-xl font-black text-slate-900">سجل الموردين ومصادر التوريد</h1>
           <p className="text-sm text-slate-500 font-bold mt-1">كشوف مستحقات المزارع وسجل دفعات التوريدات</p>
@@ -300,36 +302,36 @@ export default function SuppliersPage() {
 
       {selectedSupp && (
         <div className="bg-white border-2 border-blue-500 rounded-3xl shadow-xl overflow-hidden">
-          <div className="bg-blue-50 p-5 flex justify-between items-center border-b-2 border-blue-200">
+          <div className="bg-blue-50 p-5 flex justify-between items-center border-b-2 border-blue-200 flex-wrap gap-2 flex-wrap">
             <div>
               <h2 className="text-base font-black text-blue-900">{selectedSupp.name}</h2>
               <span className="text-xs font-bold text-slate-600">الهاتف: {selectedSupp.phone || 'غير مسجل'}</span>
             </div>
-            <div className="flex gap-2 items-center"><button onClick={() => { const code = selectedSupp.supplier_code || selectedSupp.id; setSelectedSupp(null); router.push('/suppliers/' + code); }} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1"><ExternalLink className="w-3.5 h-3.5" /><span>فتح الملف الكامل</span></button><button onClick={() => setSelectedSupp(null)} className="text-slate-400 hover:text-slate-700 font-bold text-sm">إغلاق</button></div>
+            <div className="flex gap-2 items-center flex-wrap"><button onClick={() => { const code = selectedSupp.supplier_code || selectedSupp.id; setSelectedSupp(null); router.push('/suppliers/' + code); }} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1 flex-wrap"><ExternalLink className="w-3.5 h-3.5" /><span>فتح الملف الكامل</span></button><button onClick={() => setSelectedSupp(null)} className="text-slate-400 hover:text-slate-700 font-bold text-sm">إغلاق</button></div>
           </div>
 
-          <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="p-5 grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-rose-50 p-4 rounded-2xl border border-rose-200">
               <span className="text-xs font-bold text-rose-700 block mb-1">الرصيد الدائن المستحق للمورد</span>
               <p className="text-2xl font-black text-rose-700 font-mono">{Number(selectedSupp.balance).toLocaleString()} ج</p>
             </div>
             <div className="bg-slate-50 p-4 rounded-2xl border">
-              <span className="text-xs font-bold text-slate-500 block mb-1 flex items-center gap-1"><TrendingUp className="w-3 h-3" /> إجمالي التوريدات</span>
+              <span className="text-xs font-bold text-slate-500 block mb-1 flex items-center gap-1 flex-wrap"><TrendingUp className="w-3 h-3" /> إجمالي التوريدات</span>
               <p className="text-xl font-black text-slate-800 font-mono">{totalSupply.toLocaleString()} ج</p>
             </div>
             <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-200">
-              <span className="text-xs font-bold text-emerald-700 block mb-1 flex items-center gap-1"><TrendingDown className="w-3 h-3" /> إجمالي المسدد</span>
+              <span className="text-xs font-bold text-emerald-700 block mb-1 flex items-center gap-1 flex-wrap"><TrendingDown className="w-3 h-3" /> إجمالي المسدد</span>
               <p className="text-xl font-black text-emerald-800 font-mono">{totalPaid.toLocaleString()} ج</p>
             </div>
           </div>
 
           <div className="px-5 pb-2">
             <form onSubmit={handlePayout} className="bg-blue-50 p-4 rounded-2xl border-2 border-blue-200 space-y-3">
-              <div className="flex items-center gap-2 text-blue-900">
+              <div className="flex items-center gap-2 text-blue-900 flex-wrap">
                 <Wallet className="w-5 h-5" />
                 <h3 className="text-sm font-black">تسجيل سداد دفعة صادرة</h3>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-3">
                 <input type="number" value={payoutAmount} onChange={(e) => setPayoutAmount(e.target.value)} placeholder="المبلغ" className="border-2 border-slate-200 rounded-xl px-4 text-sm font-bold bg-white h-11 font-mono outline-none" required />
                 <select value={selectedTreasury} onChange={(e) => setSelectedTreasury(e.target.value)} className="border-2 border-slate-200 rounded-xl px-3 text-sm font-bold bg-white h-11" required>
                   {treasuries.map(t => (
@@ -342,18 +344,18 @@ export default function SuppliersPage() {
           </div>
 
           <div className="p-5">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+            <div className="flex justify-between items-center mb-3 flex-wrap gap-2 flex-wrap">
+              <h3 className="text-sm font-black text-slate-800 flex items-center gap-2 flex-wrap">
                 <History className="w-5 h-5 text-blue-600" />
                 <span>كشف حساب المورد الزمني</span>
               </h3>
-              <button onClick={exportSupplierLedger} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5">
+              <button onClick={exportSupplierLedger} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 flex-wrap">
                 <Download className="w-3.5 h-3.5" />
                 <span>تصدير Excel</span>
               </button>
             </div>
             <div className="overflow-x-auto border-2 border-slate-200 rounded-2xl">
-              <table className="w-full text-right text-xs">
+              <table className="w-full text-right text-xs min-w-[600px]">
                 <thead className="bg-slate-800 text-white">
                   <tr>
                     <th className="p-3 rounded-r-xl">التاريخ</th>

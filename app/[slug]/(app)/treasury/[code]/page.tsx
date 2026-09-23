@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { getCurrentTenantId } from '@/lib/tenant-client';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import EntityActions from '@/components/EntityActions';
 import DataTable from '@/components/DataTable';
@@ -26,10 +27,10 @@ export default function TreasuryFilePage() {
 
   async function load() {
     setLoading(true);
-    const { data: t } = await supabase.from('treasury_accounts').select('*').eq('treasury_code', code).maybeSingle();
+    const { data: t } = await supabase.from('treasury_accounts').select('*').eq('tenant_id', getCurrentTenantId()).eq('treasury_code', code).maybeSingle();
     if (!t) { setLoading(false); return; }
     setTreasury(t);
-    const { data: v } = await supabase.from('financial_vouchers').select('*').eq('treasury_code', code).order('created_at', { ascending: false });
+    const { data: v } = await supabase.from('financial_vouchers').select('*').eq('tenant_id', getCurrentTenantId()).eq('treasury_code', code).order('created_at', { ascending: false });
     setVouchers(v || []);
     const { data: bals } = await supabase.rpc('get_treasury_balances');
     const found = (bals || []).find((b: any) => b.treasury_code === code);
@@ -78,18 +79,18 @@ export default function TreasuryFilePage() {
       <Breadcrumbs items={[{ label: 'الخزائن', href: '/treasury' }, { label: treasury.name_ar }]} />
 
       <div className="bg-white p-6 rounded-3xl border border-slate-200">
-        <div className="flex flex-wrap justify-between items-start gap-4">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-wrap justify-between items-start gap-4 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
             <button onClick={() => router.back()} className="bg-slate-100 hover:bg-slate-200 p-2.5 rounded-xl"><ArrowRight className="w-4 h-4 text-slate-700" /></button>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-mono text-xs font-bold bg-slate-100 px-2 py-0.5 rounded-lg text-slate-600">{treasury.treasury_code}</span>
                 <h1 className="text-xl font-black text-slate-900">{treasury.name_ar}</h1>
               </div>
               <p className="text-xs text-slate-500 font-bold mt-1">{treasury.account_type}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <EntityActions entityType="treasury" entity={treasury} onRefresh={load} showArchive={false} />
             <div className="text-left">
               <span className="text-[10px] font-bold text-slate-400 block">الرصيد الحالي</span>
@@ -99,19 +100,19 @@ export default function TreasuryFilePage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white p-5 rounded-3xl border border-slate-200">
-          <div className="flex items-center gap-2 text-emerald-500 mb-2"><TrendingUp className="w-4 h-4" /><span className="text-xs font-bold">إجمالي الداخل</span></div>
+          <div className="flex items-center gap-2 text-emerald-500 mb-2 flex-wrap"><TrendingUp className="w-4 h-4" /><span className="text-xs font-bold">إجمالي الداخل</span></div>
           <p className="text-2xl font-black font-mono text-emerald-700">{totalIn.toLocaleString()} ج</p>
           <span className="text-[10px] font-bold text-slate-500">تحصيلات + افتتاحي</span>
         </div>
         <div className="bg-white p-5 rounded-3xl border border-slate-200">
-          <div className="flex items-center gap-2 text-rose-500 mb-2"><TrendingDown className="w-4 h-4" /><span className="text-xs font-bold">إجمالي الخارج</span></div>
+          <div className="flex items-center gap-2 text-rose-500 mb-2 flex-wrap"><TrendingDown className="w-4 h-4" /><span className="text-xs font-bold">إجمالي الخارج</span></div>
           <p className="text-2xl font-black font-mono text-rose-700">{totalOut.toLocaleString()} ج</p>
           <span className="text-[10px] font-bold text-slate-500">سداد + مصروفات</span>
         </div>
         <div className="bg-white p-5 rounded-3xl border border-slate-200">
-          <div className="flex items-center gap-2 text-slate-400 mb-2"><Wallet className="w-4 h-4" /><span className="text-xs font-bold">عدد الحركات</span></div>
+          <div className="flex items-center gap-2 text-slate-400 mb-2 flex-wrap"><Wallet className="w-4 h-4" /><span className="text-xs font-bold">عدد الحركات</span></div>
           <p className="text-2xl font-black font-mono text-slate-900">{vouchers.length}</p>
           <span className="text-[10px] font-bold text-slate-500">إيصال في هذه الخزينة</span>
         </div>

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { getCurrentTenantId } from '@/lib/tenant-client';
 import DataTable from '@/components/DataTable';
 import { Package, Plus, X, Truck, ShoppingCart, Snowflake, Sun, RefreshCw } from 'lucide-react';
 import ProductFormModal from '@/components/ProductFormModal';
@@ -41,7 +42,7 @@ export default function InventoryPage() {
 
   const loadStock = async () => {
     setLoading(true);
-    const { data: settingsData } = await supabase.from('system_settings').select('setting_key, setting_value').in('setting_key', ['alert_low_stock', 'alert_fresh_hours']);
+    const { data: settingsData } = await supabase.from('system_settings').select('setting_key, setting_value').eq('tenant_id', getCurrentTenantId()).in('setting_key', ['alert_low_stock', 'alert_fresh_hours']);
     if (settingsData) {
       settingsData.forEach((s: any) => {
         if (s.setting_key === 'alert_low_stock') setLowStockThreshold(Number(s.setting_value || 50));
@@ -49,7 +50,7 @@ export default function InventoryPage() {
       });
     }
 
-    const { data } = await supabase.from('inventory').select('*').eq('is_active', true).order('product_code');
+    const { data } = await supabase.from('inventory').select('*').eq('tenant_id', getCurrentTenantId()).eq('is_active', true).order('product_code');
     if (data) {
       setStock(data);
       if (!adjProduct && data.length > 0) setAdjProduct(data[0].product_code);
@@ -70,6 +71,7 @@ export default function InventoryPage() {
       const { data: bData } = await supabase
         .from('yield_processing')
         .select('*, batches(*)')
+        .eq('tenant_id', getCurrentTenantId())
         .gt(columnName, 0)
         .order('created_at', { ascending: false })
         .limit(8);
@@ -79,6 +81,7 @@ export default function InventoryPage() {
     const { data: sData } = await supabase
       .from('sales_items')
       .select('*, sales_invoices(*)')
+      .eq('tenant_id', getCurrentTenantId())
       .eq('product_code', prod.product_code)
       .order('id', { ascending: false })
       .limit(8);
@@ -90,6 +93,7 @@ export default function InventoryPage() {
     if (!adjQty || Number(adjQty) <= 0) return;
 
     const { data: cogsResult, error: cogsErr } = await supabase.rpc('consume_fifo', {
+      p_tenant_id: getCurrentTenantId(),
       p_product_code: adjProduct,
       p_qty: Number(adjQty)
     });
@@ -104,6 +108,7 @@ export default function InventoryPage() {
     const lossValue = Number(cogsResult || 0);
 
     await supabase.from('inventory_adjustments').insert([{
+      tenant_id: getCurrentTenantId(),
       product_code: adjProduct,
       adjustment_type: 'drip_loss',
       qty_kg: Number(adjQty),
@@ -116,7 +121,7 @@ export default function InventoryPage() {
     await supabase.from('inventory').update({
       stock_kg: Math.max(0, cur - Number(adjQty)),
       last_updated: new Date()
-    }).eq('product_code', adjProduct);
+    }).eq('tenant_id', getCurrentTenantId()).eq('product_code', adjProduct);
 
     setAdjQty('');
     setShowDripModal(false);
@@ -181,7 +186,7 @@ export default function InventoryPage() {
   ];
 
   return (
-        <span className="inline-flex items-center gap-1 text-[10px] bg-slate-100 text-slate-600 border border-slate-300 px-2 py-1 rounded-lg font-bold">
+        <span className="inline-flex items-center gap-1 text-[10px] bg-slate-100 text-slate-600 border border-slate-300 px-2 py-1 rounded-lg font-bold flex-wrap">
           <X className="w-3 h-3" />
           <span>غير متوفر</span>
         </span>
@@ -240,7 +245,7 @@ export default function InventoryPage() {
   ];
 
   return (
-        <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-300 px-2 py-1 rounded-lg font-bold">
+        <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-300 px-2 py-1 rounded-lg font-bold flex-wrap">
           <Sun className="w-3 h-3" />
           <span>طازج</span>
         </span>
@@ -299,7 +304,7 @@ export default function InventoryPage() {
   ];
 
   return (
-        <span className="inline-flex items-center gap-1 text-[10px] bg-amber-50 text-amber-700 border border-amber-300 px-2 py-1 rounded-lg font-bold">
+        <span className="inline-flex items-center gap-1 text-[10px] bg-amber-50 text-amber-700 border border-amber-300 px-2 py-1 rounded-lg font-bold flex-wrap">
           <Sun className="w-3 h-3" />
           <span>قارب على الانتهاء</span>
         </span>
@@ -357,7 +362,7 @@ export default function InventoryPage() {
   ];
 
   return (
-      <span className="inline-flex items-center gap-1 text-[10px] bg-blue-50 text-blue-700 border border-blue-300 px-2 py-1 rounded-lg font-bold">
+      <span className="inline-flex items-center gap-1 text-[10px] bg-blue-50 text-blue-700 border border-blue-300 px-2 py-1 rounded-lg font-bold flex-wrap">
         <Snowflake className="w-3 h-3" />
         <span>مجمد</span>
       </span>
@@ -423,7 +428,7 @@ export default function InventoryPage() {
       {showDripModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 text-right">
-            <div className="flex justify-between items-center border-b pb-3">
+            <div className="flex justify-between items-center border-b pb-3 flex-wrap gap-2 flex-wrap">
               <h3 className="text-base font-bold text-slate-800">إثبات تسوية فقد وزن التبريد</h3>
               <button onClick={() => setShowDripModal(false)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
             </div>
@@ -441,7 +446,7 @@ export default function InventoryPage() {
                 <label className="block text-xs font-bold text-slate-600 mb-1.5">الوزن المفقود (كجم):</label>
                 <input type="number" step="0.1" value={adjQty} onChange={(e) => setAdjQty(e.target.value)} placeholder="0.0" className="w-full border-2 border-slate-200 rounded-xl px-4 text-sm font-bold bg-slate-50 h-11 font-mono" required />
               </div>
-              <div className="flex gap-2 pt-2">
+              <div className="flex gap-2 pt-2 flex-wrap">
                 <button type="submit" className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 rounded-xl text-xs shadow">خصم الفاقد</button>
                 <button type="button" onClick={() => setShowDripModal(false)} className="bg-slate-100 text-slate-700 font-bold px-5 rounded-xl text-xs">إلغاء</button>
               </div>
@@ -453,7 +458,7 @@ export default function InventoryPage() {
       {selectedProduct && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setSelectedProduct(null)}>
           <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[85vh] overflow-hidden shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="bg-slate-50 p-5 border-b flex justify-between items-center">
+            <div className="bg-slate-50 p-5 border-b flex justify-between items-center flex-wrap gap-2 flex-wrap">
               <div>
                 <h3 className="text-base font-bold text-slate-800">بطاقة تتبع الصنف: {selectedProduct.product_name_ar}</h3>
                 <span className="text-xs text-slate-500 font-mono">{selectedProduct.product_code}</span>
@@ -461,7 +466,7 @@ export default function InventoryPage() {
               <button onClick={() => setSelectedProduct(null)} className="text-slate-500 hover:text-slate-800"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-5 overflow-y-auto flex-1 space-y-5">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+              <div className="grid grid-cols-2 md:grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                 <div className="bg-slate-50 p-3 rounded-xl border">
                   <span className="text-slate-500 block">الرصيد الحالي:</span>
                   <b className="text-base font-mono">{Number(selectedProduct.stock_kg).toFixed(1)} كجم</b>
@@ -481,12 +486,12 @@ export default function InventoryPage() {
               </div>
 
               <div>
-                <h4 className="text-sm font-bold text-slate-800 mb-2 flex items-center gap-2">
+                <h4 className="text-sm font-bold text-slate-800 mb-2 flex items-center gap-2 flex-wrap">
                   <Truck className="w-4 h-4" />
                   <span>دفعات الإنتاج التي ورد منها هذا الصنف</span>
                 </h4>
                 <div className="overflow-x-auto border rounded-xl max-h-44">
-                  <table className="w-full text-right text-xs">
+                  <table className="w-full text-right text-xs min-w-[600px]">
                     <thead className="bg-slate-800 text-white sticky top-0">
                       <tr><th className="p-2.5">كود الدفعة</th><th className="p-2.5">التاريخ</th><th className="p-2.5">المورد</th><th className="p-2.5">حالة الجودة</th></tr>
                     </thead>
@@ -506,12 +511,12 @@ export default function InventoryPage() {
               </div>
 
               <div>
-                <h4 className="text-sm font-bold text-slate-800 mb-2 flex items-center gap-2">
+                <h4 className="text-sm font-bold text-slate-800 mb-2 flex items-center gap-2 flex-wrap">
                   <ShoppingCart className="w-4 h-4" />
                   <span>حركات البيع الأخيرة</span>
                 </h4>
                 <div className="overflow-x-auto border rounded-xl max-h-44">
-                  <table className="w-full text-right text-xs">
+                  <table className="w-full text-right text-xs min-w-[600px]">
                     <thead className="bg-slate-800 text-white sticky top-0">
                       <tr><th className="p-2.5">الفاتورة</th><th className="p-2.5">العميل</th><th className="p-2.5">الكمية</th><th className="p-2.5">السعر</th></tr>
                     </thead>
@@ -534,21 +539,21 @@ export default function InventoryPage() {
         </div>
       )}
 
-      <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-wrap justify-between items-center gap-3">
+      <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-wrap justify-between items-center gap-3 flex-wrap">
         <div>
           <h1 className="text-xl font-bold text-slate-800">المخازن وأرصدة غرف التبريد</h1>
           <p className="text-sm text-slate-500 font-bold mt-1">انقر على أي صنف لعرض بطاقة تتبعه الكاملة</p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={loadStock} disabled={loading} className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs border flex items-center gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={loadStock} disabled={loading} className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs border flex items-center gap-2 flex-wrap">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             <span>تحديث الأرصدة</span>
           </button>
-          <button onClick={() => setShowProductModal(true)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow">
+          <button onClick={() => setShowProductModal(true)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow flex-wrap">
             <Plus className="w-4 h-4" />
             <span>صنف جديد</span>
           </button>
-          <button onClick={() => setShowDripModal(true)} className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow">
+          <button onClick={() => setShowDripModal(true)} className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow flex-wrap">
             <Plus className="w-4 h-4" />
             <span>تسجيل هالك تبريد</span>
           </button>

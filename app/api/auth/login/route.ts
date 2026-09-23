@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server';
 import { tenantLogin } from '@/lib/tenant-auth';
-import { createClient } from '@supabase/supabase-js';
-import { logAction, getRequestIp } from '@/lib/audit';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { logAction } from '@/lib/audit';
+import { signTenantJWT } from '@/lib/jwt';
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+const supabaseAdmin = createAdminClient();
 
 const MAX_ATTEMPTS = 5;
 const WINDOW_MINUTES = 15;
@@ -22,23 +20,12 @@ async function logAttempt(identifier: string, ip: string, success: boolean, ua: 
 
 async function isRateLimited(identifier: string, ip: string): Promise<boolean> {
   const since = new Date(Date.now() - WINDOW_MINUTES * 60 * 1000).toISOString();
-
-  // عدّ المحاولات الفاشلة من نفس المستخدم
   const { count: userFails } = await supabaseAdmin
-    .from('login_attempts')
-    .select('*', { count: 'exact', head: true })
-    .eq('identifier', identifier)
-    .eq('success', false)
-    .gte('created_at', since);
-
-  // عدّ المحاولات الفاشلة من نفس الـ IP
+    .from('login_attempts').select('*', { count: 'exact', head: true })
+    .eq('identifier', identifier).eq('success', false).gte('created_at', since);
   const { count: ipFails } = await supabaseAdmin
-    .from('login_attempts')
-    .select('*', { count: 'exact', head: true })
-    .eq('ip_address', ip)
-    .eq('success', false)
-    .gte('created_at', since);
-
+    .from('login_attempts').select('*', { count: 'exact', head: true })
+    .eq('ip_address', ip).eq('success', false).gte('created_at', since);
   return (userFails || 0) >= MAX_ATTEMPTS || (ipFails || 0) >= MAX_ATTEMPTS * 2;
 }
 
@@ -54,7 +41,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'اسم المستخدم وكلمة المرور مطلوبان' }, { status: 400 });
     }
 
-    // Rate limiting check
     if (await isRateLimited(username, ip)) {
       await logAttempt(username, ip, false, ua);
       return NextResponse.json({
@@ -77,7 +63,6 @@ export async function POST(request: Request) {
       return NextResponse.json(result, { status: 401 });
     }
 
-    // نجاح — سجّل
     await logAttempt(username, ip, true, ua);
     await logAction({
       tenantId: result.user?.tenant_id,
@@ -89,7 +74,14 @@ export async function POST(request: Request) {
       ipAddress: ip,
     });
 
+    const jwtToken = signTenantJWT({
+      tenant_id: result.user!.tenant_id,
+      user_id: result.user!.id,
+      username: result.user!.username,
+    });
+
     const response = NextResponse.json({ success: true, user: result.user });
+
     response.cookies.set('tenant_token', result.token!, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -98,7 +90,14 @@ export async function POST(request: Request) {
       path: '/',
     });
 
-    // cookie الـ slug — يقرأه middleware
+    response.cookies.set('tenant_jwt', jwtToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60,
+      path: '/',
+    });
+
     if (result.user?.tenant_slug) {
       response.cookies.set('tenant_slug', result.user.tenant_slug, {
         httpOnly: false,

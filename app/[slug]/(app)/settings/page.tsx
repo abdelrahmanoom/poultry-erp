@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { getCurrentTenantId } from '@/lib/tenant-client';
 import { Plus, Trash2, BookOpen, Wallet, X, ChevronDown, ChevronLeft, Package, AlertTriangle, RefreshCw, Eye, EyeOff, Truck, Pencil, Building2, UserCheck, Users, Boxes, Bell, BellOff, Lock, Mail, MapPin, FileText, Calendar, Save, CheckCircle, Download, Link2 as LinkIcon } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -113,7 +114,7 @@ export default function SettingsPage() {
   };
 
   const loadData = async () => {
-    const { data: prods } = await supabase.from('inventory').select('*').order('is_active', { ascending: false }).order('product_code');
+    const { data: prods } = await supabase.from('inventory').select('*').eq('tenant_id', getCurrentTenantId()).order('is_active', { ascending: false }).order('product_code');
     if (prods) {
       setProducts(prods);
       const active = prods.filter((p: any) => p.is_active !== false);
@@ -123,13 +124,13 @@ export default function SettingsPage() {
       }));
     }
 
-    const { data: paths } = await supabase.from('slaughter_pathways').select('*').order('pathway_code');
+    const { data: paths } = await supabase.from('slaughter_pathways').select('*').eq('tenant_id', getCurrentTenantId()).order('pathway_code');
     if (paths) setPathways(paths);
 
-    const { data: pp } = await supabase.from('pathway_products').select('*');
+    const { data: pp } = await supabase.from('pathway_products').select('*').eq('tenant_id', getCurrentTenantId());
     if (pp) setPathwayProducts(pp);
 
-    const { data: treas } = await supabase.from('treasury_accounts').select('*').order('is_active', { ascending: false }).order('treasury_code');
+    const { data: treas } = await supabase.from('treasury_accounts').select('*').eq('tenant_id', getCurrentTenantId()).order('is_active', { ascending: false }).order('treasury_code');
     if (treas) {
       setTreasuries(treas);
       const active = treas.filter((t: any) => t.is_active !== false);
@@ -146,10 +147,10 @@ export default function SettingsPage() {
       setTreasuryBalances(bals);
     }
 
-    const { data: custData } = await supabase.from('customers').select('*').order('is_active', { ascending: false }).order('name');
+    const { data: custData } = await supabase.from('customers').select('*').eq('tenant_id', getCurrentTenantId()).order('is_active', { ascending: false }).order('name');
     if (custData) setCustomersList(custData);
 
-    const { data: suppData } = await supabase.from('suppliers').select('*').order('is_active', { ascending: false }).order('name');
+    const { data: suppData } = await supabase.from('suppliers').select('*').eq('tenant_id', getCurrentTenantId()).order('is_active', { ascending: false }).order('name');
     if (suppData) setSuppliersList(suppData);
 
     // تفاصيل النشاط
@@ -157,10 +158,10 @@ export default function SettingsPage() {
     if (bizData) setBusinessData(bizData);
 
     // المستخدمون
-    const { data: usersData } = await supabase.from('system_users').select('id, username, full_name, role, tenant_id, is_active, created_at').eq('tenant_id', 1).order('id');
+    const { data: usersData } = await supabase.from('system_users').select('id, username, full_name, role, tenant_id, is_active, created_at').eq('tenant_id', getCurrentTenantId()).order('id');
     if (usersData) setUsersList(usersData);
 
-    const { data: settings } = await supabase.from('system_settings').select('*');
+    const { data: settings } = await supabase.from('system_settings').select('*').eq('tenant_id', getCurrentTenantId());
     if (settings) {
       settings.forEach(item => {
         if (item.setting_key === 'default_transport_cost') setTransCost(item.setting_value);
@@ -192,6 +193,7 @@ export default function SettingsPage() {
     e.preventDefault();
     if (!pName) { showToast('اسم الصنف مطلوب', 'error'); return; }
     const { error } = await supabase.from('inventory').insert([{
+      tenant_id: getCurrentTenantId(),
       product_name_ar: pName.trim(), stock_kg: 0, pricing_type: pType, pricing_value: Number(pValue), is_active: true
     }]);
     if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
@@ -205,13 +207,13 @@ export default function SettingsPage() {
       pricing_type: editingProduct.pricing_type,
       pricing_value: Number(editingProduct.pricing_value),
       allocation_weight: Number(editingProduct.allocation_weight || 1)
-    }).eq('product_code', editingProduct.product_code);
+    }).eq('tenant_id', getCurrentTenantId()).eq('product_code', editingProduct.product_code);
     setEditingProduct(null); loadData(); showToast('تم تحديث الصنف');
   };
 
   const requestDeleteProduct = async (prod: any) => {
-    const { count: sc } = await supabase.from('sales_items').select('*', { count: 'exact', head: true }).eq('product_code', prod.product_code);
-    const { count: pc } = await supabase.from('pathway_products').select('*', { count: 'exact', head: true }).eq('product_code', prod.product_code);
+    const { count: sc } = await supabase.from('sales_items').select('*', { count: 'exact', head: true }).eq('tenant_id', getCurrentTenantId()).eq('product_code', prod.product_code);
+    const { count: pc } = await supabase.from('pathway_products').select('*', { count: 'exact', head: true }).eq('tenant_id', getCurrentTenantId()).eq('product_code', prod.product_code);
     setDeleteModal({ type: 'product', code: prod.product_code, name: prod.product_name_ar, usage: { total: (sc || 0) + (pc || 0) } });
   };
 
@@ -219,18 +221,18 @@ export default function SettingsPage() {
     if (!deleteModal) return;
     const { code, usage } = deleteModal;
     if (usage.total > 0) {
-      await supabase.from('inventory').update({ is_active: false }).eq('product_code', code);
+      await supabase.from('inventory').update({ is_active: false }).eq('tenant_id', getCurrentTenantId()).eq('product_code', code);
       showToast('تم أرشفة الصنف');
     } else {
-      await supabase.from('pathway_products').delete().eq('product_code', code);
-      await supabase.from('inventory').delete().eq('product_code', code);
+      await supabase.from('pathway_products').delete().eq('tenant_id', getCurrentTenantId()).eq('product_code', code);
+      await supabase.from('inventory').delete().eq('tenant_id', getCurrentTenantId()).eq('product_code', code);
       showToast('تم الحذف النهائي');
     }
     setDeleteModal(null); loadData();
   };
 
   const reactivateProduct = async (code: string) => {
-    await supabase.from('inventory').update({ is_active: true }).eq('product_code', code);
+    await supabase.from('inventory').update({ is_active: true }).eq('tenant_id', getCurrentTenantId()).eq('product_code', code);
     showToast('تم الاستعادة'); loadData();
   };
 
@@ -238,19 +240,19 @@ export default function SettingsPage() {
     e.preventDefault();
     if (!newPathwayName) return;
     const code = 'PATH-' + Date.now().toString(36).toUpperCase();
-    await supabase.from('slaughter_pathways').insert([{ pathway_code: code, name_ar: newPathwayName.trim(), yield_formula_json: {}, is_active: true }]);
+    await supabase.from('slaughter_pathways').insert([{ tenant_id: getCurrentTenantId(), pathway_code: code, name_ar: newPathwayName.trim(), yield_formula_json: {}, is_active: true }]);
     setNewPathwayName(''); setShowNewPathwayForm(false); setExpandedPathway(code);
     loadData(); showToast('تم إنشاء المسار');
   };
 
   const confirmEditPathway = async () => {
     if (!editingPathway) return;
-    await supabase.from('slaughter_pathways').update({ name_ar: editingPathway.name_ar }).eq('pathway_code', editingPathway.pathway_code);
+    await supabase.from('slaughter_pathways').update({ name_ar: editingPathway.name_ar }).eq('tenant_id', getCurrentTenantId()).eq('pathway_code', editingPathway.pathway_code);
     setEditingPathway(null); loadData(); showToast('تم تحديث اسم المسار');
   };
 
   const requestDeletePathway = async (pw: any) => {
-    const { count } = await supabase.from('batches').select('*', { count: 'exact', head: true }).eq('pathway_code', pw.pathway_code);
+    const { count } = await supabase.from('batches').select('*', { count: 'exact', head: true }).eq('tenant_id', getCurrentTenantId()).eq('pathway_code', pw.pathway_code);
     setDeleteModal({ type: 'pathway', code: pw.pathway_code, name: pw.name_ar, usage: { total: count || 0 } });
   };
 
@@ -258,18 +260,18 @@ export default function SettingsPage() {
     if (!deleteModal) return;
     const { code, usage } = deleteModal;
     if (usage.total > 0) {
-      await supabase.from('slaughter_pathways').update({ is_active: false }).eq('pathway_code', code);
+      await supabase.from('slaughter_pathways').update({ is_active: false }).eq('tenant_id', getCurrentTenantId()).eq('pathway_code', code);
       showToast('تم الأرشفة');
     } else {
-      await supabase.from('pathway_products').delete().eq('pathway_code', code);
-      await supabase.from('slaughter_pathways').delete().eq('pathway_code', code);
+      await supabase.from('pathway_products').delete().eq('tenant_id', getCurrentTenantId()).eq('pathway_code', code);
+      await supabase.from('slaughter_pathways').delete().eq('tenant_id', getCurrentTenantId()).eq('pathway_code', code);
       showToast('تم الحذف');
     }
     setDeleteModal(null); loadData();
   };
 
   const reactivatePathway = async (code: string) => {
-    await supabase.from('slaughter_pathways').update({ is_active: true }).eq('pathway_code', code);
+    await supabase.from('slaughter_pathways').update({ is_active: true }).eq('tenant_id', getCurrentTenantId()).eq('pathway_code', code);
     showToast('تم الاستعادة'); loadData();
   };
 
@@ -277,13 +279,13 @@ export default function SettingsPage() {
     if (!selectedProductToAdd) return;
     const r = Number(ratioToAdd) / 100;
     if (r <= 0 || r > 1) { showToast('النسبة غير صحيحة', 'error'); return; }
-    await supabase.from('pathway_products').insert([{ pathway_code: pc, product_code: selectedProductToAdd, expected_ratio: r }]);
+    await supabase.from('pathway_products').insert([{ tenant_id: getCurrentTenantId(), pathway_code: pc, product_code: selectedProductToAdd, expected_ratio: r }]);
     setAddingToPathway(null); setSelectedProductToAdd(''); setRatioToAdd('25');
     loadData(); showToast('تم إضافة الصنف');
   };
 
   const handleRemoveProductFromPathway = async (pc: string, productCode: string) => {
-    await supabase.from('pathway_products').delete().eq('pathway_code', pc).eq('product_code', productCode);
+    await supabase.from('pathway_products').delete().eq('tenant_id', getCurrentTenantId()).eq('pathway_code', pc).eq('product_code', productCode);
     loadData(); showToast('تم الحذف');
   };
 
@@ -292,6 +294,7 @@ export default function SettingsPage() {
     if (!newTreasuryName.trim()) { showToast('الاسم مطلوب', 'error'); return; }
     const code = 'TR-' + Date.now().toString(36).toUpperCase();
     const { error } = await supabase.from('treasury_accounts').insert([{
+      tenant_id: getCurrentTenantId(),
       treasury_code: code, name_ar: newTreasuryName.trim(), account_type: newTreasuryType, is_active: true
     }]);
     if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
@@ -301,12 +304,12 @@ export default function SettingsPage() {
 
   const confirmEditTreasury = async () => {
     if (!editingTreasury) return;
-    await supabase.from('treasury_accounts').update({ name_ar: editingTreasury.name_ar, account_type: editingTreasury.account_type }).eq('treasury_code', editingTreasury.treasury_code);
+    await supabase.from('treasury_accounts').update({ name_ar: editingTreasury.name_ar, account_type: editingTreasury.account_type }).eq('tenant_id', getCurrentTenantId()).eq('treasury_code', editingTreasury.treasury_code);
     setEditingTreasury(null); loadData(); showToast('تم التحديث');
   };
 
   const requestDeleteTreasury = async (t: any) => {
-    const { count } = await supabase.from('financial_vouchers').select('*', { count: 'exact', head: true }).eq('treasury_code', t.treasury_code);
+    const { count } = await supabase.from('financial_vouchers').select('*', { count: 'exact', head: true }).eq('tenant_id', getCurrentTenantId()).eq('treasury_code', t.treasury_code);
     setDeleteModal({ type: 'treasury', code: t.treasury_code, name: t.name_ar, usage: { total: count || 0 } });
   };
 
@@ -314,17 +317,17 @@ export default function SettingsPage() {
     if (!deleteModal) return;
     const { code, usage } = deleteModal;
     if (usage.total > 0) {
-      await supabase.from('treasury_accounts').update({ is_active: false }).eq('treasury_code', code);
+      await supabase.from('treasury_accounts').update({ is_active: false }).eq('tenant_id', getCurrentTenantId()).eq('treasury_code', code);
       showToast('تم الأرشفة');
     } else {
-      await supabase.from('treasury_accounts').delete().eq('treasury_code', code);
+      await supabase.from('treasury_accounts').delete().eq('tenant_id', getCurrentTenantId()).eq('treasury_code', code);
       showToast('تم الحذف');
     }
     setDeleteModal(null); loadData();
   };
 
   const reactivateTreasury = async (code: string) => {
-    await supabase.from('treasury_accounts').update({ is_active: true }).eq('treasury_code', code);
+    await supabase.from('treasury_accounts').update({ is_active: true }).eq('tenant_id', getCurrentTenantId()).eq('treasury_code', code);
     showToast('تم الاستعادة'); loadData();
   };
 
@@ -334,13 +337,13 @@ export default function SettingsPage() {
       name: editingCustomer.name,
       phone: editingCustomer.phone,
       credit_limit: Number(editingCustomer.credit_limit || 50000)
-    }).eq('id', editingCustomer.id);
+    }).eq('tenant_id', getCurrentTenantId()).eq('id', editingCustomer.id);
     setEditingCustomer(null); loadData(); showToast('تم تحديث العميل');
   };
 
   const requestDeleteCustomer = async (c: any) => {
-    const { count: ic } = await supabase.from('sales_invoices').select('*', { count: 'exact', head: true }).eq('customer_name', c.name);
-    const { count: vc } = await supabase.from('financial_vouchers').select('*', { count: 'exact', head: true }).eq('entity_name', c.name);
+    const { count: ic } = await supabase.from('sales_invoices').select('*', { count: 'exact', head: true }).eq('tenant_id', getCurrentTenantId()).eq('customer_name', c.name);
+    const { count: vc } = await supabase.from('financial_vouchers').select('*', { count: 'exact', head: true }).eq('tenant_id', getCurrentTenantId()).eq('entity_name', c.name);
     setDeleteModal({ type: 'customer', id: c.id, name: c.name, usage: { total: (ic || 0) + (vc || 0) + (Number(c.balance) > 0 ? 1 : 0) } });
   };
 
@@ -348,29 +351,29 @@ export default function SettingsPage() {
     if (!deleteModal) return;
     const { id, usage } = deleteModal;
     if (usage.total > 0) {
-      await supabase.from('customers').update({ is_active: false }).eq('id', id);
+      await supabase.from('customers').update({ is_active: false }).eq('tenant_id', getCurrentTenantId()).eq('id', id);
       showToast('تم أرشفة العميل');
     } else {
-      await supabase.from('customers').delete().eq('id', id);
+      await supabase.from('customers').delete().eq('tenant_id', getCurrentTenantId()).eq('id', id);
       showToast('تم الحذف');
     }
     setDeleteModal(null); loadData();
   };
 
   const reactivateCustomer = async (id: number) => {
-    await supabase.from('customers').update({ is_active: true }).eq('id', id);
+    await supabase.from('customers').update({ is_active: true }).eq('tenant_id', getCurrentTenantId()).eq('id', id);
     showToast('تم الاستعادة'); loadData();
   };
 
   const confirmEditSupplier = async () => {
     if (!editingSupplier) return;
-    await supabase.from('suppliers').update({ name: editingSupplier.name, phone: editingSupplier.phone }).eq('id', editingSupplier.id);
+    await supabase.from('suppliers').update({ name: editingSupplier.name, phone: editingSupplier.phone }).eq('tenant_id', getCurrentTenantId()).eq('id', editingSupplier.id);
     setEditingSupplier(null); loadData(); showToast('تم تحديث المورد');
   };
 
   const requestDeleteSupplier = async (s: any) => {
-    const { count: bc } = await supabase.from('batches').select('*', { count: 'exact', head: true }).eq('supplier_name', s.name);
-    const { count: vc } = await supabase.from('financial_vouchers').select('*', { count: 'exact', head: true }).eq('entity_name', s.name);
+    const { count: bc } = await supabase.from('batches').select('*', { count: 'exact', head: true }).eq('tenant_id', getCurrentTenantId()).eq('supplier_name', s.name);
+    const { count: vc } = await supabase.from('financial_vouchers').select('*', { count: 'exact', head: true }).eq('tenant_id', getCurrentTenantId()).eq('entity_name', s.name);
     setDeleteModal({ type: 'supplier', id: s.id, name: s.name, usage: { total: (bc || 0) + (vc || 0) + (Number(s.balance) > 0 ? 1 : 0) } });
   };
 
@@ -378,17 +381,17 @@ export default function SettingsPage() {
     if (!deleteModal) return;
     const { id, usage } = deleteModal;
     if (usage.total > 0) {
-      await supabase.from('suppliers').update({ is_active: false }).eq('id', id);
+      await supabase.from('suppliers').update({ is_active: false }).eq('tenant_id', getCurrentTenantId()).eq('id', id);
       showToast('تم أرشفة المورد');
     } else {
-      await supabase.from('suppliers').delete().eq('id', id);
+      await supabase.from('suppliers').delete().eq('tenant_id', getCurrentTenantId()).eq('id', id);
       showToast('تم الحذف');
     }
     setDeleteModal(null); loadData();
   };
 
   const reactivateSupplier = async (id: number) => {
-    await supabase.from('suppliers').update({ is_active: true }).eq('id', id);
+    await supabase.from('suppliers').update({ is_active: true }).eq('tenant_id', getCurrentTenantId()).eq('id', id);
     showToast('تم الاستعادة'); loadData();
   };
 
@@ -413,30 +416,30 @@ export default function SettingsPage() {
 
   const saveLogistics = async () => {
     await supabase.from('system_settings').upsert([
-      { setting_key: 'default_transport_cost', setting_value: transCost },
-      { setting_key: 'default_labor_cost', setting_value: labCost },
-      { setting_key: 'default_broker_cost', setting_value: brokCost }
+      { tenant_id: getCurrentTenantId(), setting_key: 'default_transport_cost', setting_value: transCost },
+      { tenant_id: getCurrentTenantId(), setting_key: 'default_labor_cost', setting_value: labCost },
+      { tenant_id: getCurrentTenantId(), setting_key: 'default_broker_cost', setting_value: brokCost }
     ], { onConflict: 'setting_key' });
     showToast('تم حفظ التكاليف');
   };
 
   const saveAlerts = async () => {
     await supabase.from('system_settings').upsert([
-      { setting_key: 'alert_fresh_hours', setting_value: alertFresh },
-      { setting_key: 'alert_fresh_enabled', setting_value: alertFreshOn ? 'true' : 'false' },
-      { setting_key: 'alert_low_stock', setting_value: alertStock },
-      { setting_key: 'alert_low_stock_enabled', setting_value: alertStockOn ? 'true' : 'false' },
-      { setting_key: 'alert_max_variance', setting_value: alertVariance },
-      { setting_key: 'alert_max_variance_enabled', setting_value: alertVarianceOn ? 'true' : 'false' },
-      { setting_key: 'alert_credit_limit', setting_value: alertCredit },
-      { setting_key: 'alert_credit_limit_enabled', setting_value: alertCreditOn ? 'true' : 'false' },
-      { setting_key: 'alert_debt_days', setting_value: alertDebtDays },
-      { setting_key: 'alert_debt_days_enabled', setting_value: alertDebtDaysOn ? 'true' : 'false' },
-      { setting_key: 'alert_min_treasury', setting_value: alertMinTreasury },
-      { setting_key: 'alert_min_treasury_enabled', setting_value: alertMinTreasuryOn ? 'true' : 'false' },
-      { setting_key: 'alert_credit_warning', setting_value: alertCreditWarning },
-      { setting_key: 'min_profit_margin_percent', setting_value: minProfitMargin },
-      { setting_key: 'alert_credit_warning_enabled', setting_value: alertCreditWarningOn ? 'true' : 'false' }
+      { tenant_id: getCurrentTenantId(), setting_key: 'alert_fresh_hours', setting_value: alertFresh },
+      { tenant_id: getCurrentTenantId(), setting_key: 'alert_fresh_enabled', setting_value: alertFreshOn ? 'true' : 'false' },
+      { tenant_id: getCurrentTenantId(), setting_key: 'alert_low_stock', setting_value: alertStock },
+      { tenant_id: getCurrentTenantId(), setting_key: 'alert_low_stock_enabled', setting_value: alertStockOn ? 'true' : 'false' },
+      { tenant_id: getCurrentTenantId(), setting_key: 'alert_max_variance', setting_value: alertVariance },
+      { tenant_id: getCurrentTenantId(), setting_key: 'alert_max_variance_enabled', setting_value: alertVarianceOn ? 'true' : 'false' },
+      { tenant_id: getCurrentTenantId(), setting_key: 'alert_credit_limit', setting_value: alertCredit },
+      { tenant_id: getCurrentTenantId(), setting_key: 'alert_credit_limit_enabled', setting_value: alertCreditOn ? 'true' : 'false' },
+      { tenant_id: getCurrentTenantId(), setting_key: 'alert_debt_days', setting_value: alertDebtDays },
+      { tenant_id: getCurrentTenantId(), setting_key: 'alert_debt_days_enabled', setting_value: alertDebtDaysOn ? 'true' : 'false' },
+      { tenant_id: getCurrentTenantId(), setting_key: 'alert_min_treasury', setting_value: alertMinTreasury },
+      { tenant_id: getCurrentTenantId(), setting_key: 'alert_min_treasury_enabled', setting_value: alertMinTreasuryOn ? 'true' : 'false' },
+      { tenant_id: getCurrentTenantId(), setting_key: 'alert_credit_warning', setting_value: alertCreditWarning },
+      { tenant_id: getCurrentTenantId(), setting_key: 'min_profit_margin_percent', setting_value: minProfitMargin },
+      { tenant_id: getCurrentTenantId(), setting_key: 'alert_credit_warning_enabled', setting_value: alertCreditWarningOn ? 'true' : 'false' }
     ], { onConflict: 'setting_key' });
     showToast('تم حفظ إعدادات التنبيهات');
   };
@@ -446,10 +449,11 @@ export default function SettingsPage() {
     let saved = 0;
 
     if (tab === 'treasuries') {
-      await supabase.from('financial_vouchers').delete().eq('type', 'opening_treasury');
+      await supabase.from('financial_vouchers').delete().eq('tenant_id', getCurrentTenantId()).eq('type', 'opening_treasury');
       for (const t of openTreasuries) {
         if (Number(t.balance) > 0) {
           await supabase.from('financial_vouchers').insert([{
+            tenant_id: getCurrentTenantId(),
             type: 'opening_treasury', entity_name: 'رصيد افتتاحي - ' + t.name,
             amount: Number(t.balance), payment_method: 'cash', treasury_code: t.code, notes: 'رصيد افتتاحي مرحّل'
           }]);
@@ -459,16 +463,17 @@ export default function SettingsPage() {
     }
 
     if (tab === 'customers') {
-      await supabase.from('financial_vouchers').delete().eq('type', 'opening_debit');
+      await supabase.from('financial_vouchers').delete().eq('tenant_id', getCurrentTenantId()).eq('type', 'opening_debit');
       for (const c of openCustomers) {
         if (c.name.trim() && Number(c.balance) > 0) {
-          const { data: existing } = await supabase.from('customers').select('id').eq('name', c.name.trim()).maybeSingle();
+          const { data: existing } = await supabase.from('customers').select('id').eq('tenant_id', getCurrentTenantId()).eq('name', c.name.trim()).maybeSingle();
           if (existing) {
-            await supabase.from('customers').update({ balance: Number(c.balance), phone: c.phone.trim() || null }).eq('id', existing.id);
+            await supabase.from('customers').update({ balance: Number(c.balance), phone: c.phone.trim() || null }).eq('tenant_id', getCurrentTenantId()).eq('id', existing.id);
           } else {
-            await supabase.from('customers').insert([{ name: c.name.trim(), phone: c.phone.trim() || null, balance: Number(c.balance), is_active: true }]);
+            await supabase.from('customers').insert([{ tenant_id: getCurrentTenantId(), name: c.name.trim(), phone: c.phone.trim() || null, balance: Number(c.balance), is_active: true }]);
           }
           await supabase.from('financial_vouchers').insert([{
+            tenant_id: getCurrentTenantId(),
             type: 'opening_debit', entity_name: c.name.trim(), amount: Number(c.balance),
             payment_method: 'cash', notes: 'رصيد افتتاحي - مديونية سابقة'
           }]);
@@ -478,16 +483,17 @@ export default function SettingsPage() {
     }
 
     if (tab === 'suppliers') {
-      await supabase.from('financial_vouchers').delete().eq('type', 'opening_credit');
+      await supabase.from('financial_vouchers').delete().eq('tenant_id', getCurrentTenantId()).eq('type', 'opening_credit');
       for (const s of openSuppliers) {
         if (s.name.trim() && Number(s.balance) > 0) {
-          const { data: existing } = await supabase.from('suppliers').select('id').eq('name', s.name.trim()).maybeSingle();
+          const { data: existing } = await supabase.from('suppliers').select('id').eq('tenant_id', getCurrentTenantId()).eq('name', s.name.trim()).maybeSingle();
           if (existing) {
-            await supabase.from('suppliers').update({ balance: Number(s.balance), phone: s.phone.trim() || null }).eq('id', existing.id);
+            await supabase.from('suppliers').update({ balance: Number(s.balance), phone: s.phone.trim() || null }).eq('tenant_id', getCurrentTenantId()).eq('id', existing.id);
           } else {
-            await supabase.from('suppliers').insert([{ name: s.name.trim(), phone: s.phone.trim() || null, balance: Number(s.balance), is_active: true }]);
+            await supabase.from('suppliers').insert([{ tenant_id: getCurrentTenantId(), name: s.name.trim(), phone: s.phone.trim() || null, balance: Number(s.balance), is_active: true }]);
           }
           await supabase.from('financial_vouchers').insert([{
+            tenant_id: getCurrentTenantId(),
             type: 'opening_credit', entity_name: s.name.trim(), amount: Number(s.balance),
             payment_method: 'cash', notes: 'رصيد افتتاحي - مستحق سابق'
           }]);
@@ -497,11 +503,12 @@ export default function SettingsPage() {
     }
 
     if (tab === 'inventory') {
-      await supabase.from('inventory_lots').delete().eq('source_type', 'opening');
+      await supabase.from('inventory_lots').delete().eq('tenant_id', getCurrentTenantId()).eq('source_type', 'opening');
       for (const st of openStock) {
         if (Number(st.weight) > 0) {
-          await supabase.from('inventory').update({ stock_kg: Number(st.weight), last_updated: new Date() }).eq('product_code', st.code);
+          await supabase.from('inventory').update({ stock_kg: Number(st.weight), last_updated: new Date() }).eq('tenant_id', getCurrentTenantId()).eq('product_code', st.code);
           await supabase.from('inventory_lots').insert([{
+          tenant_id: getCurrentTenantId(),
             product_code: st.code, source_type: 'opening', source_ref: 'OPENING-BALANCE',
             quantity_kg: Number(st.weight), remaining_kg: Number(st.weight), cost_per_kg: Number(st.cost) || 0
           }]);
@@ -537,7 +544,7 @@ export default function SettingsPage() {
     const { data } = await supabase
       .from('system_users')
       .select('id, username, full_name, role, tenant_id, is_active, created_at')
-      .eq('tenant_id', 1)
+      .eq('tenant_id', getCurrentTenantId())
       .order('id');
     if (data) setUsersList(data);
   };
@@ -606,7 +613,7 @@ export default function SettingsPage() {
       return;
     }
     // تحقق من التفرد داخل نفس tenant
-    const { data: existing } = await supabase.from('system_users').select('id').eq('username', newUserName.trim()).eq('tenant_id', 1).maybeSingle();
+    const { data: existing } = await supabase.from('system_users').select('id').eq('username', newUserName.trim()).eq('tenant_id', getCurrentTenantId()).maybeSingle();
     if (existing) { showToast('اسم المستخدم موجود مسبقاً', 'error'); return; }
 
     const { error } = await supabase.from('system_users').insert([{
@@ -614,7 +621,7 @@ export default function SettingsPage() {
       full_name: newUserFullName.trim(),
       password_hash: newUserPassword.trim(),
       role: newUserRole,
-      tenant_id: 1,
+      tenant_id: getCurrentTenantId(),
       is_active: true,
     }]);
 
@@ -635,7 +642,7 @@ export default function SettingsPage() {
         .from('system_users')
         .select('id')
         .eq('username', editingUser.username.trim())
-        .eq('tenant_id', 1)
+        .eq('tenant_id', getCurrentTenantId())
         .maybeSingle();
       if (dup) { showToast('اسم المستخدم موجود مسبقاً', 'error'); return; }
     }
@@ -656,7 +663,7 @@ export default function SettingsPage() {
       updateData.password_hash = await bcryptLib.hash(editingUserPassword.trim(), 10);
     }
 
-    const { error } = await supabase.from('system_users').update(updateData).eq('id', editingUser.id);
+    const { error } = await supabase.from('system_users').update(updateData).eq('tenant_id', getCurrentTenantId()).eq('id', editingUser.id);
 
     if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
     showToast('تم التحديث');
@@ -672,7 +679,7 @@ export default function SettingsPage() {
     const bcryptLib = await import('bcryptjs');
     const hash = await bcryptLib.hash(newPasswordForUser.trim(), 10);
 
-    const { error } = await supabase.from('system_users').update({ password_hash: hash }).eq('id', changingPasswordUser.id);
+    const { error } = await supabase.from('system_users').update({ password_hash: hash }).eq('tenant_id', getCurrentTenantId()).eq('id', changingPasswordUser.id);
     if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
 
     showToast('تم تغيير كلمة المرور');
@@ -683,7 +690,7 @@ export default function SettingsPage() {
   const handleDeleteUser = async (user: any) => {
     if (user.username === 'admin') { showToast('لا يمكن حذف المدير', 'error'); return; }
     if (!confirm('تأكيد حذف المستخدم ' + user.username + '؟')) return;
-    const { error } = await supabase.from('system_users').delete().eq('id', user.id);
+    const { error } = await supabase.from('system_users').delete().eq('tenant_id', getCurrentTenantId()).eq('id', user.id);
     if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
     showToast('تم الحذف');
     loadUsers();
@@ -696,7 +703,7 @@ export default function SettingsPage() {
     total += await saveSubTab('customers');
     total += await saveSubTab('suppliers');
     total += await saveSubTab('inventory');
-    await supabase.from('system_settings').upsert([{ setting_key: 'opening_balances_locked', setting_value: 'true' }], { onConflict: 'setting_key' });
+    await supabase.from('system_settings').upsert([{ tenant_id: getCurrentTenantId(), setting_key: 'opening_balances_locked', setting_value: 'true' }], { onConflict: 'setting_key' });
     setOpeningLocked(true);
     setShowLockConfirm(false);
     showToast('تم اعتماد ' + total + ' حركة وقفلها نهائياً');
@@ -708,7 +715,7 @@ export default function SettingsPage() {
     if (!openingLocked) return;
     (async () => {
       // 1. بضاعة الثلاجة
-      const { data: lots } = await supabase.from('inventory_lots').select('*').eq('source_type', 'opening');
+      const { data: lots } = await supabase.from('inventory_lots').select('*').eq('tenant_id', getCurrentTenantId()).eq('source_type', 'opening');
       if (lots && lots.length > 0) {
         setOpenStock(prev => {
           const map: any = {};
@@ -724,7 +731,7 @@ export default function SettingsPage() {
       }
 
       // 2. الخزائن
-      const { data: treas } = await supabase.from('financial_vouchers').select('*').eq('type', 'opening_treasury');
+      const { data: treas } = await supabase.from('financial_vouchers').select('*').eq('tenant_id', getCurrentTenantId()).eq('type', 'opening_treasury');
       if (treas && treas.length > 0) {
         setOpenTreasuries(prev => {
           const map: any = {};
@@ -737,8 +744,8 @@ export default function SettingsPage() {
       }
 
       // 3. العملاء
-      const { data: custV } = await supabase.from('financial_vouchers').select('*').eq('type', 'opening_debit');
-      const { data: custList } = await supabase.from('customers').select('*');
+      const { data: custV } = await supabase.from('financial_vouchers').select('*').eq('tenant_id', getCurrentTenantId()).eq('type', 'opening_debit');
+      const { data: custList } = await supabase.from('customers').select('*').eq('tenant_id', getCurrentTenantId());
       if (custV && custV.length > 0) {
         setOpenCustomers(custV.map((v: any) => {
           const c = (custList || []).find((x: any) => x.name === v.entity_name);
@@ -747,8 +754,8 @@ export default function SettingsPage() {
       }
 
       // 4. الموردين
-      const { data: suppV } = await supabase.from('financial_vouchers').select('*').eq('type', 'opening_credit');
-      const { data: suppList } = await supabase.from('suppliers').select('*');
+      const { data: suppV } = await supabase.from('financial_vouchers').select('*').eq('tenant_id', getCurrentTenantId()).eq('type', 'opening_credit');
+      const { data: suppList } = await supabase.from('suppliers').select('*').eq('tenant_id', getCurrentTenantId());
       if (suppV && suppV.length > 0) {
         setOpenSuppliers(suppV.map((v: any) => {
           const s = (suppList || []).find((x: any) => x.name === v.entity_name);
@@ -832,7 +839,7 @@ export default function SettingsPage() {
             <div className="bg-blue-50 border border-blue-200 p-3 rounded-2xl text-[11px] font-bold text-blue-900">
               سيظهر الاسم الجديد فوراً في الإنتاج وفي كل الصفحات.
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <button onClick={confirmEditPathway} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs">حفظ</button>
               <button onClick={() => setEditingPathway(null)} className="bg-slate-100 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs">إلغاء</button>
             </div>
@@ -855,7 +862,7 @@ export default function SettingsPage() {
                 <p className="text-xs text-slate-600 font-medium mt-1">القيمة الافتراضية 1.0 — زدها لصنف مرتفع القيمة، أنقصها لصنف منخفض.</p>
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <button onClick={confirmEditProduct} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs">حفظ</button>
               <button onClick={() => setEditingProduct(null)} className="bg-slate-100 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs">إلغاء</button>
             </div>
@@ -877,7 +884,7 @@ export default function SettingsPage() {
                 </select>
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <button onClick={confirmEditTreasury} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs">حفظ</button>
               <button onClick={() => setEditingTreasury(null)} className="bg-slate-100 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs">إلغاء</button>
             </div>
@@ -894,7 +901,7 @@ export default function SettingsPage() {
               <div><label className="block text-slate-700 mb-1.5">الهاتف:</label><input type="text" value={editingCustomer.phone || ''} onChange={(e) => setEditingCustomer({ ...editingCustomer, phone: e.target.value })} className="w-full border-2 rounded-xl px-3 bg-slate-50 h-11 font-mono" /></div>
               <div><label className="block text-slate-700 mb-1.5">سقف الائتمان (ج):</label><input type="number" value={editingCustomer.credit_limit || 50000} onChange={(e) => setEditingCustomer({ ...editingCustomer, credit_limit: e.target.value })} className="w-full border-2 rounded-xl px-3 bg-slate-50 h-11 font-mono" /></div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <button onClick={confirmEditCustomer} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs">حفظ</button>
               <button onClick={() => setEditingCustomer(null)} className="bg-slate-100 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs">إلغاء</button>
             </div>
@@ -910,7 +917,7 @@ export default function SettingsPage() {
               <div><label className="block text-slate-700 mb-1.5">الاسم:</label><input type="text" value={editingSupplier.name} onChange={(e) => setEditingSupplier({ ...editingSupplier, name: e.target.value })} className="w-full border-2 rounded-xl px-3 bg-slate-50 h-11" /></div>
               <div><label className="block text-slate-700 mb-1.5">الهاتف:</label><input type="text" value={editingSupplier.phone || ''} onChange={(e) => setEditingSupplier({ ...editingSupplier, phone: e.target.value })} className="w-full border-2 rounded-xl px-3 bg-slate-50 h-11 font-mono" /></div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <button onClick={confirmEditSupplier} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs">حفظ</button>
               <button onClick={() => setEditingSupplier(null)} className="bg-slate-100 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs">إلغاء</button>
             </div>
@@ -921,7 +928,7 @@ export default function SettingsPage() {
       {deleteModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 text-right">
-            <div className="flex items-center gap-2 text-slate-700">
+            <div className="flex items-center gap-2 text-slate-700 flex-wrap">
               <AlertTriangle className="w-6 h-6" />
               <h3 className="text-base font-black">تأكيد الحذف</h3>
             </div>
@@ -931,7 +938,7 @@ export default function SettingsPage() {
                 <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl text-xs font-bold text-slate-700">
                   مستخدم في {deleteModal.usage.total} حركة. سيتم الأرشفة (لا يمكن الحذف النهائي حفاظاً على الأثر المحاسبي).
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <button onClick={deleteModal.type === 'product' ? confirmDeleteProduct : deleteModal.type === 'pathway' ? confirmDeletePathway : deleteModal.type === 'treasury' ? confirmDeleteTreasury : deleteModal.type === 'customer' ? confirmDeleteCustomer : confirmDeleteSupplier} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs">أرشفة الآن</button>
                   <button onClick={() => setDeleteModal(null)} className="bg-slate-100 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs">إلغاء</button>
                 </div>
@@ -939,7 +946,7 @@ export default function SettingsPage() {
             ) : (
               <>
                 <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl text-xs font-bold text-slate-700">لا استخدام سابق. سيتم الحذف النهائي.</div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <button onClick={deleteModal.type === 'product' ? confirmDeleteProduct : deleteModal.type === 'pathway' ? confirmDeletePathway : deleteModal.type === 'treasury' ? confirmDeleteTreasury : deleteModal.type === 'customer' ? confirmDeleteCustomer : confirmDeleteSupplier} className="flex-1 bg-rose-600 text-white font-bold py-2.5 rounded-xl text-xs">حذف نهائي</button>
                   <button onClick={() => setDeleteModal(null)} className="bg-slate-100 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs">إلغاء</button>
                 </div>
@@ -949,7 +956,7 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-wrap justify-between items-center gap-3">
+      <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-wrap justify-between items-center gap-3 flex-wrap">
         <div>
           <h1 className="text-xl font-black text-slate-900">مركز الإعدادات والتهيئة</h1>
           <p className="text-sm text-slate-500 font-bold mt-1">إدارة الشجيرات والخزائن والمسارات والأرصدة</p>
@@ -962,7 +969,7 @@ export default function SettingsPage() {
 
       <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-6">
         {/* Level 1: Groups */}
-        <div className="flex flex-wrap gap-2 border-b-2 border-slate-300 pb-3">
+        <div className="flex flex-wrap gap-2 border-b-2 border-slate-300 pb-3 flex-wrap">
           {tabGroups.map(g => (
             <button
               key={g.key}
@@ -980,7 +987,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Level 2: Sub-tabs */}
-        <div className="flex flex-wrap gap-3 pt-1 pb-2 border-b border-slate-200">
+        <div className="flex flex-wrap gap-3 pt-1 pb-2 border-b border-slate-200 flex-wrap">
           {currentGroup.tabs.map(t => (
             <button
               key={t.key}
@@ -1001,7 +1008,7 @@ export default function SettingsPage() {
           <div className="space-y-6">
             <form onSubmit={handleAddProduct} className="bg-slate-50 p-6 rounded-3xl border space-y-4">
               <h3 className="text-xs font-black text-slate-800">إضافة صنف جديد (الكود يُولَّد تلقائياً)</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-bold">
+              <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-4 text-xs font-bold">
                 <div><label className="block text-slate-700 mb-1.5">الاسم:</label><input type="text" value={pName} onChange={(e) => setPName(e.target.value)} className="w-full border rounded-xl px-3 bg-white h-11" required /></div>
                 <div><label className="block text-slate-700 mb-1.5">طريقة التسعير:</label><select value={pType} onChange={(e) => setPType(e.target.value)} className="w-full border rounded-xl px-2 bg-white h-11"><option value="multiplier">معامل ضرب في البورصة</option><option value="addition">إضافة ثابتة</option><option value="fixed">سعر حر</option></select></div>
                 <div><label className="block text-slate-700 mb-1.5">المعامل:</label><input type="number" step="0.05" value={pValue} onChange={(e) => setPValue(e.target.value)} className="w-full border rounded-xl px-3 bg-white h-11 font-mono" required /></div>
@@ -1009,7 +1016,7 @@ export default function SettingsPage() {
               <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-2.5 rounded-xl text-xs">إدراج الصنف</button>
             </form>
             <div className="overflow-x-auto border rounded-2xl">
-              <table className="w-full text-right text-xs">
+              <table className="w-full text-right text-xs min-w-[600px]">
                 <thead className="bg-slate-800 text-white font-bold"><tr><th className="p-3">الكود</th><th className="p-3">الاسم</th><th className="p-3">طريقة التسعير</th><th className="p-3">المعامل</th><th className="p-3 text-center">معامل التوزيع</th><th className="p-3 text-center">إجراءات</th></tr></thead>
                 <tbody className="divide-y divide-slate-200">
                   {displayedProducts.length === 0 && <tr><td colSpan={5} className="p-6 text-center text-slate-400 font-sans">لا توجد أصناف</td></tr>}
@@ -1024,12 +1031,12 @@ export default function SettingsPage() {
                         <td className="p-3 text-center font-bold text-slate-700 font-mono">{p.allocation_weight || 1}</td>
                         <td className="p-3 text-center">
                           {active ? (
-                            <div className="flex gap-1 justify-center">
+                            <div className="flex gap-1 justify-center flex-wrap">
                               <button onClick={() => setEditingProduct({ ...p })} className="text-slate-700 hover:bg-slate-100 p-2 rounded-lg"><Pencil className="w-4 h-4" /></button>
                               <button onClick={() => requestDeleteProduct(p)} className="text-rose-600 hover:bg-rose-50 p-2 rounded-lg"><Trash2 className="w-4 h-4" /></button>
                             </div>
                           ) : (
-                            <button onClick={() => reactivateProduct(p.product_code)} className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 mx-auto"><RefreshCw className="w-3 h-3" /><span>استعادة</span></button>
+                            <button onClick={() => reactivateProduct(p.product_code)} className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 mx-auto flex-wrap"><RefreshCw className="w-3 h-3" /><span>استعادة</span></button>
                           )}
                         </td>
                       </tr>
@@ -1043,16 +1050,16 @@ export default function SettingsPage() {
 
         {activeTab === 'treasuries' && (
           <div className="space-y-6">
-            <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-200">
+            <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-200 flex-wrap gap-2 flex-wrap">
               <div>
                 <h3 className="text-sm font-black text-slate-800">شجرة الخزائن والحسابات النقدية</h3>
                 <p className="text-xs text-slate-600 font-bold mt-1">إجمالي السيولة: <span className="font-mono text-base">{totalCash.toLocaleString()} ج</span></p>
               </div>
-              <button onClick={() => setShowNewTreasuryForm(!showNewTreasuryForm)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5"><Plus className="w-4 h-4" /><span>خزينة جديدة</span></button>
+              <button onClick={() => setShowNewTreasuryForm(!showNewTreasuryForm)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 flex-wrap"><Plus className="w-4 h-4" /><span>خزينة جديدة</span></button>
             </div>
             {showNewTreasuryForm && (
               <form onSubmit={handleAddTreasury} className="bg-slate-50 p-5 rounded-2xl border space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-3 items-end">
                   <div><label className="block text-xs font-bold text-slate-700 mb-1.5">الاسم:</label><input type="text" value={newTreasuryName} onChange={(e) => setNewTreasuryName(e.target.value)} className="w-full border-2 rounded-xl px-4 text-sm font-bold bg-white h-11" required /></div>
                   <div><label className="block text-xs font-bold text-slate-700 mb-1.5">النوع:</label>
                     <select value={newTreasuryType} onChange={(e) => setNewTreasuryType(e.target.value)} className="w-full border-2 rounded-xl px-3 text-sm font-bold bg-white h-11">
@@ -1061,7 +1068,7 @@ export default function SettingsPage() {
                       <option value="عهدة">عهدة</option>
                     </select>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-2.5 rounded-xl text-xs h-11">حفظ</button>
                     <button type="button" onClick={() => setShowNewTreasuryForm(false)} className="bg-slate-200 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs h-11">إلغاء</button>
                   </div>
@@ -1069,7 +1076,7 @@ export default function SettingsPage() {
               </form>
             )}
             <div className="overflow-x-auto border rounded-2xl">
-              <table className="w-full text-right text-xs">
+              <table className="w-full text-right text-xs min-w-[600px]">
                 <thead className="bg-slate-800 text-white font-bold"><tr><th className="p-3">الكود</th><th className="p-3">الاسم</th><th className="p-3">النوع</th><th className="p-3">الرصيد</th><th className="p-3 text-center">إجراءات</th></tr></thead>
                 <tbody className="divide-y divide-slate-200">
                   {displayedTreasuries.length === 0 && <tr><td colSpan={5} className="p-6 text-center text-slate-400 font-sans">لا توجد خزائن</td></tr>}
@@ -1084,12 +1091,12 @@ export default function SettingsPage() {
                         <td className="p-3 font-black text-slate-900 font-mono">{balance.toLocaleString()} ج</td>
                         <td className="p-3 text-center">
                           {active ? (
-                            <div className="flex gap-1 justify-center">
+                            <div className="flex gap-1 justify-center flex-wrap">
                               <button onClick={() => setEditingTreasury({ ...t })} className="text-slate-700 hover:bg-slate-100 p-2 rounded-lg"><Pencil className="w-4 h-4" /></button>
                               <button onClick={() => requestDeleteTreasury(t)} className="text-rose-600 hover:bg-rose-50 p-2 rounded-lg"><Trash2 className="w-4 h-4" /></button>
                             </div>
                           ) : (
-                            <button onClick={() => reactivateTreasury(t.treasury_code)} className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 mx-auto"><RefreshCw className="w-3 h-3" /><span>استعادة</span></button>
+                            <button onClick={() => reactivateTreasury(t.treasury_code)} className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 mx-auto flex-wrap"><RefreshCw className="w-3 h-3" /><span>استعادة</span></button>
                           )}
                         </td>
                       </tr>
@@ -1108,7 +1115,7 @@ export default function SettingsPage() {
               <p className="text-xs text-slate-600 font-bold mt-1">لإضافة مورد جديد، استخدم معالج الأرصدة الافتتاحية أو أمر توريد</p>
             </div>
             <div className="overflow-x-auto border rounded-2xl">
-              <table className="w-full text-right text-xs">
+              <table className="w-full text-right text-xs min-w-[600px]">
                 <thead className="bg-slate-800 text-white font-bold"><tr><th className="p-3">الاسم</th><th className="p-3">الهاتف</th><th className="p-3">الرصيد المستحق</th><th className="p-3">الحالة</th><th className="p-3 text-center">إجراءات</th></tr></thead>
                 <tbody className="divide-y divide-slate-200">
                   {displayedSuppliers.length === 0 && <tr><td colSpan={5} className="p-6 text-center text-slate-400 font-sans">لا يوجد موردون</td></tr>}
@@ -1122,12 +1129,12 @@ export default function SettingsPage() {
                         <td className="p-3">{active ? <span className="text-slate-700 font-bold text-[11px]">نشط</span> : <span className="text-slate-500 font-bold text-[11px]">مؤرشف</span>}</td>
                         <td className="p-3 text-center">
                           {active ? (
-                            <div className="flex gap-1 justify-center">
+                            <div className="flex gap-1 justify-center flex-wrap">
                               <button onClick={() => setEditingSupplier({ ...s })} className="text-slate-700 hover:bg-slate-100 p-2 rounded-lg"><Pencil className="w-4 h-4" /></button>
                               <button onClick={() => requestDeleteSupplier(s)} className="text-rose-600 hover:bg-rose-50 p-2 rounded-lg"><Trash2 className="w-4 h-4" /></button>
                             </div>
                           ) : (
-                            <button onClick={() => reactivateSupplier(s.id)} className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 mx-auto"><RefreshCw className="w-3 h-3" /><span>استعادة</span></button>
+                            <button onClick={() => reactivateSupplier(s.id)} className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 mx-auto flex-wrap"><RefreshCw className="w-3 h-3" /><span>استعادة</span></button>
                           )}
                         </td>
                       </tr>
@@ -1146,7 +1153,7 @@ export default function SettingsPage() {
               <p className="text-xs text-slate-600 font-bold mt-1">لإضافة عميل جديد، استخدم معالج الأرصدة الافتتاحية أو فاتورة مبيعات</p>
             </div>
             <div className="overflow-x-auto border rounded-2xl">
-              <table className="w-full text-right text-xs">
+              <table className="w-full text-right text-xs min-w-[600px]">
                 <thead className="bg-slate-800 text-white font-bold"><tr><th className="p-3">الاسم</th><th className="p-3">الهاتف</th><th className="p-3">الرصيد المدين</th><th className="p-3">سقف الائتمان</th><th className="p-3">الحالة</th><th className="p-3 text-center">إجراءات</th></tr></thead>
                 <tbody className="divide-y divide-slate-200">
                   {displayedCustomers.length === 0 && <tr><td colSpan={6} className="p-6 text-center text-slate-400 font-sans">لا يوجد عملاء</td></tr>}
@@ -1161,12 +1168,12 @@ export default function SettingsPage() {
                         <td className="p-3">{active ? <span className="text-slate-700 font-bold text-[11px]">نشط</span> : <span className="text-slate-500 font-bold text-[11px]">مؤرشف</span>}</td>
                         <td className="p-3 text-center">
                           {active ? (
-                            <div className="flex gap-1 justify-center">
+                            <div className="flex gap-1 justify-center flex-wrap">
                               <button onClick={() => setEditingCustomer({ ...c })} className="text-slate-700 hover:bg-slate-100 p-2 rounded-lg"><Pencil className="w-4 h-4" /></button>
                               <button onClick={() => requestDeleteCustomer(c)} className="text-rose-600 hover:bg-rose-50 p-2 rounded-lg"><Trash2 className="w-4 h-4" /></button>
                             </div>
                           ) : (
-                            <button onClick={() => reactivateCustomer(c.id)} className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 mx-auto"><RefreshCw className="w-3 h-3" /><span>استعادة</span></button>
+                            <button onClick={() => reactivateCustomer(c.id)} className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 mx-auto flex-wrap"><RefreshCw className="w-3 h-3" /><span>استعادة</span></button>
                           )}
                         </td>
                       </tr>
@@ -1180,13 +1187,13 @@ export default function SettingsPage() {
 
         {activeTab === 'pathways' && (
           <div className="space-y-6">
-            <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-200">
+            <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-200 flex-wrap gap-2 flex-wrap">
               <div><h3 className="text-sm font-black text-slate-800">مسارات التجهيز والتقطيع</h3><p className="text-xs text-slate-600 font-bold mt-1">الأصناف المؤرشفة لا تظهر إلا عند التفعيل</p></div>
-              <button onClick={() => setShowNewPathwayForm(!showNewPathwayForm)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5"><Plus className="w-4 h-4" /><span>مسار جديد</span></button>
+              <button onClick={() => setShowNewPathwayForm(!showNewPathwayForm)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 flex-wrap"><Plus className="w-4 h-4" /><span>مسار جديد</span></button>
             </div>
             {showNewPathwayForm && (
               <form onSubmit={handleCreatePathway} className="bg-slate-50 p-5 rounded-2xl border space-y-3">
-                <div className="flex gap-3 items-end">
+                <div className="flex gap-3 items-end flex-wrap">
                   <div className="flex-1"><label className="block text-xs font-bold text-slate-700 mb-1.5">اسم المسار:</label><input type="text" value={newPathwayName} onChange={(e) => setNewPathwayName(e.target.value)} className="w-full border-2 rounded-xl px-4 text-sm font-bold bg-white h-11" required /></div>
                   <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-2.5 rounded-xl text-xs h-11">حفظ</button>
                   <button type="button" onClick={() => setShowNewPathwayForm(false)} className="bg-slate-200 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs h-11">إلغاء</button>
@@ -1203,19 +1210,19 @@ export default function SettingsPage() {
                 const active = pw.is_active !== false;
                 return (
                   <div key={pw.pathway_code} className={`border-2 rounded-2xl overflow-hidden ${!active ? 'border-slate-200 bg-slate-50' : 'border-slate-200'}`}>
-                    <div className="bg-slate-50 p-4 flex justify-between items-center cursor-pointer" onClick={() => active && setExpandedPathway(isExpanded ? null : pw.pathway_code)}>
-                      <div className="flex items-center gap-3">
+                    <div className="bg-slate-50 p-4 flex justify-between items-center cursor-pointer flex-wrap gap-2 flex-wrap" onClick={() => active && setExpandedPathway(isExpanded ? null : pw.pathway_code)}>
+                      <div className="flex items-center gap-3 flex-wrap">
                         {active && (isExpanded ? <ChevronDown className="w-5 h-5 text-slate-700" /> : <ChevronLeft className="w-5 h-5 text-slate-400" />)}
                         <div><h4 className="text-sm font-black text-slate-900">{pw.name_ar}{!active && <span className="mr-2 text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded-lg">مؤرشف</span>}</h4><span className="text-[11px] font-bold text-slate-500">{items.length} أصناف • النسب: {total.toFixed(1)}% • الفاقد: {(100 - total).toFixed(1)}%</span></div>
                       </div>
                       <div>
                         {active ? (
-                          <div className="flex gap-1">
+                          <div className="flex gap-1 flex-wrap">
                             <button onClick={(e) => { e.stopPropagation(); setEditingPathway({ ...pw }); }} className="text-slate-700 hover:bg-slate-100 p-2 rounded-lg" title="تعديل الاسم"><Pencil className="w-4 h-4" /></button>
                             <button onClick={(e) => { e.stopPropagation(); requestDeletePathway(pw); }} className="text-rose-600 hover:bg-rose-50 p-2 rounded-lg"><Trash2 className="w-4 h-4" /></button>
                           </div>
                         ) : (
-                          <button onClick={(e) => { e.stopPropagation(); reactivatePathway(pw.pathway_code); }} className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1"><RefreshCw className="w-3 h-3" /><span>استعادة</span></button>
+                          <button onClick={(e) => { e.stopPropagation(); reactivatePathway(pw.pathway_code); }} className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 flex-wrap"><RefreshCw className="w-3 h-3" /><span>استعادة</span></button>
                         )}
                       </div>
                     </div>
@@ -1224,9 +1231,9 @@ export default function SettingsPage() {
                         {items.length === 0 ? (<p className="text-xs text-slate-400 text-center py-4 font-bold">لا أصناف بعد</p>) : (
                           <div className="space-y-2">
                             {items.map(item => (
-                              <div key={item.id} className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border">
-                                <div className="flex items-center gap-2"><Package className="w-4 h-4 text-slate-700" /><span className="text-xs font-bold text-slate-800">{getProductName(item.product_code)}</span><span className="text-[10px] text-slate-400 font-mono">{item.product_code}</span></div>
-                                <div className="flex items-center gap-3"><span className="text-sm font-black text-slate-800 font-mono">{(Number(item.expected_ratio) * 100).toFixed(1)}%</span><button onClick={() => handleRemoveProductFromPathway(pw.pathway_code, item.product_code)} className="text-rose-600 hover:bg-rose-50 p-1.5 rounded-lg"><X className="w-4 h-4" /></button></div>
+                              <div key={item.id} className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border flex-wrap gap-2 flex-wrap">
+                                <div className="flex items-center gap-2 flex-wrap"><Package className="w-4 h-4 text-slate-700" /><span className="text-xs font-bold text-slate-800">{getProductName(item.product_code)}</span><span className="text-[10px] text-slate-400 font-mono">{item.product_code}</span></div>
+                                <div className="flex items-center gap-3 flex-wrap"><span className="text-sm font-black text-slate-800 font-mono">{(Number(item.expected_ratio) * 100).toFixed(1)}%</span><button onClick={() => handleRemoveProductFromPathway(pw.pathway_code, item.product_code)} className="text-rose-600 hover:bg-rose-50 p-1.5 rounded-lg"><X className="w-4 h-4" /></button></div>
                               </div>
                             ))}
                           </div>
@@ -1237,7 +1244,7 @@ export default function SettingsPage() {
                               <div><label className="block text-xs font-bold text-slate-700 mb-1">الصنف:</label><select value={selectedProductToAdd} onChange={(e) => setSelectedProductToAdd(e.target.value)} className="w-full border rounded-xl px-3 bg-white h-10 text-xs font-bold"><option value="">— اختر —</option>{available.map(p => (<option key={p.product_code} value={p.product_code}>{p.product_name_ar}</option>))}</select></div>
                               <div><label className="block text-xs font-bold text-slate-700 mb-1">النسبة (%):</label><input type="number" step="0.5" value={ratioToAdd} onChange={(e) => setRatioToAdd(e.target.value)} className="w-full border rounded-xl px-3 bg-white h-10 text-xs font-bold font-mono" /></div>
                             </div>
-                            <div className="flex gap-2"><button onClick={() => handleAddProductToPathway(pw.pathway_code)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2 rounded-lg text-xs">إضافة</button><button onClick={() => { setAddingToPathway(null); setSelectedProductToAdd(''); }} className="bg-slate-200 text-slate-700 font-bold px-4 py-2 rounded-lg text-xs">إلغاء</button></div>
+                            <div className="flex gap-2 flex-wrap"><button onClick={() => handleAddProductToPathway(pw.pathway_code)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2 rounded-lg text-xs">إضافة</button><button onClick={() => { setAddingToPathway(null); setSelectedProductToAdd(''); }} className="bg-slate-200 text-slate-700 font-bold px-4 py-2 rounded-lg text-xs">إلغاء</button></div>
                           </div>
                         ) : (
                           <button onClick={() => { setAddingToPathway(pw.pathway_code); setSelectedProductToAdd(available[0]?.product_code || ''); }} disabled={available.length === 0} className="w-full py-2.5 bg-slate-50 text-slate-700 font-bold rounded-xl border border-dashed border-slate-300 text-xs disabled:opacity-50">{available.length === 0 ? 'كل الأصناف مُضافة' : '+ إضافة صنف للمسار'}</button>
@@ -1254,8 +1261,8 @@ export default function SettingsPage() {
         {activeTab === 'logistics' && (
           <div className="space-y-6">
             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs text-slate-700 font-bold">القيم تُستخدم تلقائياً في شاشة الإنتاج، ويمكن تعديلها لكل دفعة على حدة.</div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-bold">
-              <div className="bg-slate-50 p-5 rounded-2xl border space-y-1.5"><label className="block text-slate-700 font-bold flex items-center gap-1.5"><Truck className="w-4 h-4 text-slate-700" /> تكلفة الشحن والتفريغ (ج):</label><input type="number" value={transCost} onChange={(e) => setTransCost(e.target.value)} className="w-full border-2 rounded-xl px-4 bg-white h-12 font-mono text-base" /></div>
+            <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-4 text-xs font-bold">
+              <div className="bg-slate-50 p-5 rounded-2xl border space-y-1.5"><label className="block text-slate-700 font-bold flex items-center gap-1.5 flex-wrap"><Truck className="w-4 h-4 text-slate-700" /> تكلفة الشحن والتفريغ (ج):</label><input type="number" value={transCost} onChange={(e) => setTransCost(e.target.value)} className="w-full border-2 rounded-xl px-4 bg-white h-12 font-mono text-base" /></div>
               <div className="bg-slate-50 p-5 rounded-2xl border space-y-1.5"><label className="block text-slate-700 font-bold">أجور عمالة التنزيل (ج):</label><input type="number" value={labCost} onChange={(e) => setLabCost(e.target.value)} className="w-full border-2 rounded-xl px-4 bg-white h-12 font-mono text-base" /></div>
               <div className="bg-slate-50 p-5 rounded-2xl border space-y-1.5"><label className="block text-slate-700 font-bold">رسوم الوساطة التجارية (ج):</label><input type="number" value={brokCost} onChange={(e) => setBrokCost(e.target.value)} className="w-full border-2 rounded-xl px-4 bg-white h-12 font-mono text-base" /></div>
             </div>
@@ -1265,13 +1272,13 @@ export default function SettingsPage() {
 
         {activeTab === 'alerts' && (
           <div className="space-y-6">
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs text-slate-700 font-bold flex items-center gap-2">
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs text-slate-700 font-bold flex items-center gap-2 flex-wrap">
               <Bell className="w-4 h-4 text-slate-700" />
               <span className="text-sm">اضغط أيقونة الجرس بجانب أي تنبيه لتفعيله أو إيقافه. الأرقام تُعدَّل بشكل مستقل.</span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-white p-5 rounded-2xl border-2 border-slate-200">
-                <div className="flex flex-wrap items-center gap-4">
+                <div className="flex flex-wrap items-center gap-4 flex-wrap">
                   <button onClick={() => setAlertFreshOn(!alertFreshOn)} className={`w-12 h-12 rounded-xl flex items-center justify-center transition shrink-0 ${alertFreshOn ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-400'}`}>
                     {alertFreshOn ? <Bell className="w-5 h-5" /> : <BellOff className="w-5 h-5" />}
                   </button>
@@ -1284,7 +1291,7 @@ export default function SettingsPage() {
               </div>
 
               <div className="bg-white p-5 rounded-2xl border-2 border-slate-200">
-                <div className="flex flex-wrap items-center gap-4">
+                <div className="flex flex-wrap items-center gap-4 flex-wrap">
                   <button onClick={() => setAlertStockOn(!alertStockOn)} className={`w-12 h-12 rounded-xl flex items-center justify-center transition shrink-0 ${alertStockOn ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-400'}`}>
                     {alertStockOn ? <Bell className="w-5 h-5" /> : <BellOff className="w-5 h-5" />}
                   </button>
@@ -1297,7 +1304,7 @@ export default function SettingsPage() {
               </div>
 
               <div className="bg-white p-5 rounded-2xl border-2 border-slate-200">
-                <div className="flex flex-wrap items-center gap-4">
+                <div className="flex flex-wrap items-center gap-4 flex-wrap">
                   <button onClick={() => setAlertVarianceOn(!alertVarianceOn)} className={`w-12 h-12 rounded-xl flex items-center justify-center transition shrink-0 ${alertVarianceOn ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-400'}`}>
                     {alertVarianceOn ? <Bell className="w-5 h-5" /> : <BellOff className="w-5 h-5" />}
                   </button>
@@ -1310,7 +1317,7 @@ export default function SettingsPage() {
               </div>
 
               <div className="bg-white p-5 rounded-2xl border-2 border-slate-200">
-                <div className="flex flex-wrap items-center gap-4">
+                <div className="flex flex-wrap items-center gap-4 flex-wrap">
                   <button onClick={() => setAlertCreditOn(!alertCreditOn)} className={`w-12 h-12 rounded-xl flex items-center justify-center transition shrink-0 ${alertCreditOn ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-400'}`}>
                     {alertCreditOn ? <Bell className="w-5 h-5" /> : <BellOff className="w-5 h-5" />}
                   </button>
@@ -1323,7 +1330,7 @@ export default function SettingsPage() {
               </div>
 
               <div className="bg-white p-5 rounded-2xl border-2 border-slate-200">
-                <div className="flex flex-wrap items-center gap-4">
+                <div className="flex flex-wrap items-center gap-4 flex-wrap">
                   <button onClick={() => setAlertDebtDaysOn(!alertDebtDaysOn)} className={`w-12 h-12 rounded-xl flex items-center justify-center transition shrink-0 ${alertDebtDaysOn ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-400'}`}>
                     {alertDebtDaysOn ? <Bell className="w-5 h-5" /> : <BellOff className="w-5 h-5" />}
                   </button>
@@ -1336,7 +1343,7 @@ export default function SettingsPage() {
               </div>
 
               <div className="bg-white p-5 rounded-2xl border-2 border-slate-200">
-                <div className="flex flex-wrap items-center gap-4">
+                <div className="flex flex-wrap items-center gap-4 flex-wrap">
                   <button onClick={() => setAlertMinTreasuryOn(!alertMinTreasuryOn)} className={`w-12 h-12 rounded-xl flex items-center justify-center transition shrink-0 ${alertMinTreasuryOn ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-400'}`}>
                     {alertMinTreasuryOn ? <Bell className="w-5 h-5" /> : <BellOff className="w-5 h-5" />}
                   </button>
@@ -1349,7 +1356,7 @@ export default function SettingsPage() {
               </div>
 
               <div className="bg-white p-5 rounded-2xl border-2 border-slate-200">
-                <div className="flex flex-wrap items-center gap-4">
+                <div className="flex flex-wrap items-center gap-4 flex-wrap">
                   <button onClick={() => setAlertCreditWarningOn(!alertCreditWarningOn)} className={`w-12 h-12 rounded-xl flex items-center justify-center transition shrink-0 ${alertCreditWarningOn ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-400'}`}>
                     {alertCreditWarningOn ? <Bell className="w-5 h-5" /> : <BellOff className="w-5 h-5" />}
                   </button>
@@ -1369,7 +1376,7 @@ export default function SettingsPage() {
         {activeTab === 'opening' && (
           <div className="space-y-5">
             {openingLocked && (
-              <div className="bg-slate-100 border-2 border-slate-300 p-5 rounded-3xl flex items-center gap-3">
+              <div className="bg-slate-100 border-2 border-slate-300 p-5 rounded-3xl flex items-center gap-3 flex-wrap">
                 <div className="w-10 h-10 rounded-full bg-slate-900 flex items-center justify-center text-white font-black">✓</div>
                 <div>
                   <h3 className="text-sm font-black text-slate-900">تم اعتماد الأرصدة الافتتاحية وقفلها</h3>
@@ -1378,7 +1385,7 @@ export default function SettingsPage() {
               </div>
             )}
 
-            <div className="flex flex-wrap gap-2 bg-slate-100 p-2 rounded-2xl">
+            <div className="flex flex-wrap gap-2 bg-slate-100 p-2 rounded-2xl flex-wrap">
               <button onClick={() => setOpeningSubTab('treasuries')} className={`flex-1 min-w-[140px] py-3 rounded-xl text-xs font-black flex items-center justify-center gap-2 ${openingSubTab === 'treasuries' ? 'bg-white text-slate-900 shadow' : 'text-slate-600'}`}><Wallet className="w-4 h-4" /><span>رصيد الخزائن</span></button>
               <button onClick={() => setOpeningSubTab('customers')} className={`flex-1 min-w-[140px] py-3 rounded-xl text-xs font-black flex items-center justify-center gap-2 ${openingSubTab === 'customers' ? 'bg-white text-slate-900 shadow' : 'text-slate-600'}`}><Users className="w-4 h-4" /><span>مديونيات العملاء</span></button>
               <button onClick={() => setOpeningSubTab('suppliers')} className={`flex-1 min-w-[140px] py-3 rounded-xl text-xs font-black flex items-center justify-center gap-2 ${openingSubTab === 'suppliers' ? 'bg-white text-slate-900 shadow' : 'text-slate-600'}`}><Truck className="w-4 h-4" /><span>مستحقات الموردين</span></button>
@@ -1388,13 +1395,13 @@ export default function SettingsPage() {
             <div className="space-y-5">
               {openingSubTab === 'treasuries' && (
                 <div className="bg-slate-50 p-5 rounded-3xl border space-y-3">
-                  <div className="flex justify-between items-center border-b pb-2">
+                  <div className="flex justify-between items-center border-b pb-2 flex-wrap gap-2 flex-wrap">
                     <div>
                       <h3 className="text-sm font-black text-slate-800">الأرصدة الافتتاحية للخزائن</h3>
                       <p className="text-[11px] text-slate-500 font-bold mt-1">كل خزينة في "شجرة الخزائن" تظهر هنا تلقائياً</p>
                     </div>
                     {!openingLocked && (
-                      <button type="button" onClick={() => { setShowNewTreasuryForm(true); setActiveTab('treasuries'); }} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1">
+                      <button type="button" onClick={() => { setShowNewTreasuryForm(true); setActiveTab('treasuries'); }} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1 flex-wrap">
                         <Plus className="w-3.5 h-3.5" /><span>إنشاء خزينة</span>
                       </button>
                     )}
@@ -1405,7 +1412,7 @@ export default function SettingsPage() {
                     return (
                       <div key={t.code} className={'p-4 rounded-2xl border-2 transition flex flex-wrap gap-3 items-center ' + (hasValue ? 'bg-emerald-50/60 border-emerald-300' : 'bg-white border-slate-200')}>
                         <div className="flex-1 min-w-[200px]">
-                          <div className="flex items-center gap-2 mb-1">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
                             {t.type === 'حساب بنكي' ? <Building2 className={'w-4 h-4 ' + (hasValue ? 'text-emerald-700' : 'text-slate-700')} /> : t.type === 'عهدة' ? <UserCheck className={'w-4 h-4 ' + (hasValue ? 'text-emerald-700' : 'text-slate-700')} /> : <Wallet className={'w-4 h-4 ' + (hasValue ? 'text-emerald-700' : 'text-slate-700')} />}
                             <span className={'text-sm font-bold ' + (hasValue ? 'text-emerald-800' : 'text-slate-800')}>{t.name}</span>
                             <span className="text-[10px] text-slate-400 font-mono">{t.code}</span>
@@ -1424,20 +1431,20 @@ export default function SettingsPage() {
 
               {openingSubTab === 'customers' && (
                 <div className="bg-slate-50 p-5 rounded-3xl border space-y-3">
-                  <div className="flex justify-between items-center border-b pb-2">
+                  <div className="flex justify-between items-center border-b pb-2 flex-wrap gap-2 flex-wrap">
                     <div>
                       <h3 className="text-sm font-black text-slate-800">مديونيات العملاء المرحّلة</h3>
                       <p className="text-[11px] text-slate-500 font-bold mt-1">كل عميل يُسجَّل كحركة افتتاحية في كشف حسابه</p>
                     </div>
                     {!openingLocked && (
-                      <button type="button" onClick={() => setOpenCustomers([...openCustomers, { name: '', phone: '', balance: 0 }])} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1"><Plus className="w-3.5 h-3.5" /><span>عميل</span></button>
+                      <button type="button" onClick={() => setOpenCustomers([...openCustomers, { name: '', phone: '', balance: 0 }])} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1 flex-wrap"><Plus className="w-3.5 h-3.5" /><span>عميل</span></button>
                     )}
                   </div>
                   {openCustomers.map((c, idx) => {
                     const hasValue = Number(c.balance) > 0;
                     return (
                       <div key={idx} className={'p-3 rounded-2xl border-2 transition space-y-2 ' + (hasValue ? 'bg-emerald-50/60 border-emerald-300' : 'bg-white border-slate-200')}>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
+                        <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-2 items-end">
                           <div>
                             <label className={'block text-[10px] font-bold mb-0.5 ' + (hasValue ? 'text-emerald-700' : 'text-slate-500')}>اسم العميل</label>
                             <input type="text" value={c.name} disabled={openingLocked} onChange={(e) => { const u = [...openCustomers]; u[idx].name = e.target.value; setOpenCustomers(u); }} className={'w-full border rounded-xl px-3 text-xs font-bold h-10 ' + (hasValue ? 'border-emerald-300 bg-white text-emerald-900' : 'border-slate-200 disabled:bg-slate-100')} />
@@ -1446,7 +1453,7 @@ export default function SettingsPage() {
                             <label className={'block text-[10px] font-bold mb-0.5 ' + (hasValue ? 'text-emerald-700' : 'text-slate-500')}>الهاتف</label>
                             <input type="text" value={c.phone} disabled={openingLocked} onChange={(e) => { const u = [...openCustomers]; u[idx].phone = e.target.value; setOpenCustomers(u); }} className={'w-full border rounded-xl px-3 text-xs font-bold h-10 ' + (hasValue ? 'border-emerald-300 bg-white text-emerald-900' : 'border-slate-200 disabled:bg-slate-100')} />
                           </div>
-                          <div className="flex gap-2 items-end">
+                          <div className="flex gap-2 items-end flex-wrap">
                             <div className="flex-1">
                               <label className={'block text-[10px] font-bold mb-0.5 ' + (hasValue ? 'text-emerald-700' : 'text-slate-500')}>المديونية الافتتاحية (ج)</label>
                               <input type="number" value={c.balance} disabled={openingLocked} onChange={(e) => { const u = [...openCustomers]; u[idx].balance = Number(e.target.value); setOpenCustomers(u); }} className={'w-full border-2 rounded-xl px-3 text-xs font-bold font-mono h-10 ' + (hasValue ? 'border-emerald-300 bg-white text-emerald-900' : 'border-slate-300 disabled:bg-slate-100')} />
@@ -1462,20 +1469,20 @@ export default function SettingsPage() {
 
               {openingSubTab === 'suppliers' && (
                 <div className="bg-slate-50 p-5 rounded-3xl border space-y-3">
-                  <div className="flex justify-between items-center border-b pb-2">
+                  <div className="flex justify-between items-center border-b pb-2 flex-wrap gap-2 flex-wrap">
                     <div>
                       <h3 className="text-sm font-black text-slate-800">مستحقات الموردين المرحّلة</h3>
                       <p className="text-[11px] text-slate-500 font-bold mt-1">كل مورد يُسجَّل كحركة افتتاحية في كشف حسابه</p>
                     </div>
                     {!openingLocked && (
-                      <button type="button" onClick={() => setOpenSuppliers([...openSuppliers, { name: '', phone: '', balance: 0 }])} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1"><Plus className="w-3.5 h-3.5" /><span>مورد</span></button>
+                      <button type="button" onClick={() => setOpenSuppliers([...openSuppliers, { name: '', phone: '', balance: 0 }])} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1 flex-wrap"><Plus className="w-3.5 h-3.5" /><span>مورد</span></button>
                     )}
                   </div>
                   {openSuppliers.map((s, idx) => {
                     const hasValue = Number(s.balance) > 0;
                     return (
                       <div key={idx} className={'p-3 rounded-2xl border-2 transition space-y-2 ' + (hasValue ? 'bg-emerald-50/60 border-emerald-300' : 'bg-white border-slate-200')}>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
+                        <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-2 items-end">
                           <div>
                             <label className={'block text-[10px] font-bold mb-0.5 ' + (hasValue ? 'text-emerald-700' : 'text-slate-500')}>اسم المورد</label>
                             <input type="text" value={s.name} disabled={openingLocked} onChange={(e) => { const u = [...openSuppliers]; u[idx].name = e.target.value; setOpenSuppliers(u); }} className={'w-full border rounded-xl px-3 text-xs font-bold h-10 ' + (hasValue ? 'border-emerald-300 bg-white text-emerald-900' : 'border-slate-200 disabled:bg-slate-100')} />
@@ -1484,7 +1491,7 @@ export default function SettingsPage() {
                             <label className={'block text-[10px] font-bold mb-0.5 ' + (hasValue ? 'text-emerald-700' : 'text-slate-500')}>الهاتف</label>
                             <input type="text" value={s.phone} disabled={openingLocked} onChange={(e) => { const u = [...openSuppliers]; u[idx].phone = e.target.value; setOpenSuppliers(u); }} className={'w-full border rounded-xl px-3 text-xs font-bold h-10 ' + (hasValue ? 'border-emerald-300 bg-white text-emerald-900' : 'border-slate-200 disabled:bg-slate-100')} />
                           </div>
-                          <div className="flex gap-2 items-end">
+                          <div className="flex gap-2 items-end flex-wrap">
                             <div className="flex-1">
                               <label className={'block text-[10px] font-bold mb-0.5 ' + (hasValue ? 'text-emerald-700' : 'text-slate-500')}>المستحق الافتتاحي (ج)</label>
                               <input type="number" value={s.balance} disabled={openingLocked} onChange={(e) => { const u = [...openSuppliers]; u[idx].balance = Number(e.target.value); setOpenSuppliers(u); }} className={'w-full border-2 rounded-xl px-3 text-xs font-bold font-mono h-10 ' + (hasValue ? 'border-emerald-300 bg-white text-emerald-900' : 'border-slate-300 disabled:bg-slate-100')} />
@@ -1500,13 +1507,13 @@ export default function SettingsPage() {
 
               {openingSubTab === 'inventory' && (
                 <div className="bg-slate-50 p-5 rounded-3xl border space-y-3">
-                  <div className="flex justify-between items-center border-b pb-2">
+                  <div className="flex justify-between items-center border-b pb-2 flex-wrap gap-2 flex-wrap">
                     <div>
                       <h3 className="text-sm font-black text-slate-800">بضاعة أول المدة في الثلاجة</h3>
                       <p className="text-[11px] text-slate-500 font-bold mt-1">كل صنف في "شجرة الأصناف" يظهر هنا تلقائياً</p>
                     </div>
                     {!openingLocked && (
-                      <button type="button" onClick={() => setActiveTab('products')} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1">
+                      <button type="button" onClick={() => setActiveTab('products')} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1 flex-wrap">
                         <Plus className="w-3.5 h-3.5" /><span>إنشاء صنف</span>
                       </button>
                     )}
@@ -1517,7 +1524,7 @@ export default function SettingsPage() {
                       return (
                         <div key={st.code} className={'p-3 rounded-2xl border-2 space-y-2 transition ' + (hasValue ? 'bg-emerald-50/60 border-emerald-300' : 'bg-white border-slate-200')}>
                           <span className={'text-xs font-bold block ' + (hasValue ? 'text-emerald-800' : 'text-slate-700')}>{st.name}:</span>
-                          <div className="grid grid-cols-3 gap-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                             <div>
                               <label className={'block text-[10px] font-bold mb-0.5 ' + (hasValue ? 'text-emerald-700' : 'text-slate-500')}>الكمية (كجم)</label>
                               <input type="number" step="0.1" value={st.weight} disabled={openingLocked} onChange={(e) => { const u = [...openStock]; u[idx].weight = Number(e.target.value); setOpenStock(u); }} className={'w-full border rounded-lg px-2 h-9 text-xs font-mono ' + (hasValue ? 'border-emerald-300 bg-white font-bold text-emerald-900' : 'border-slate-200 disabled:bg-slate-100')} />
@@ -1541,7 +1548,7 @@ export default function SettingsPage() {
               )}
 
               {!openingLocked && (
-                <div className="flex gap-3 items-center">
+                <div className="flex gap-3 items-center flex-wrap">
                   <button type="button" onClick={handleSaveCurrentTab} className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold px-4 py-3 rounded-2xl text-xs">حفظ التبويب الحالي</button>
                   <button type="button" onClick={handleSaveAll} className="bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold px-4 py-3 rounded-2xl text-xs">حفظ الكل</button>
                   <button type="button" onClick={() => setShowLockConfirm(true)} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-xl text-sm">اعتماد وقفل الأرصدة الافتتاحية</button>
@@ -1553,9 +1560,9 @@ export default function SettingsPage() {
 
         {activeTab === 'business' && businessData && (
           <div className="space-y-4">
-            <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-200">
+            <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-200 flex-wrap gap-2 flex-wrap">
               <div>
-                <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                <h3 className="text-sm font-black text-slate-800 flex items-center gap-2 flex-wrap">
                   <Building2 className="w-4 h-4" />
                   تفاصيل النشاط التجاري
                 </h3>
@@ -1563,7 +1570,7 @@ export default function SettingsPage() {
                   الاسم والعنوان والبيانات الرسمية — تظهر في الفواتير والتقارير
                 </p>
               </div>
-              <button onClick={handleSaveBusiness} disabled={businessSaving} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-1.5">
+              <button onClick={handleSaveBusiness} disabled={businessSaving} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-1.5 flex-wrap">
                 <Save className="w-4 h-4" />
                 <span>{businessSaving ? 'جاري الحفظ...' : 'حفظ التعديلات'}</span>
               </button>
@@ -1605,7 +1612,7 @@ export default function SettingsPage() {
               </div>
 
               <div className="bg-blue-50 border-2 border-blue-200 p-4 rounded-2xl space-y-3">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <div className="bg-blue-200 p-1.5 rounded-lg">
                     <LinkIcon className="w-3.5 h-3.5 text-blue-800" />
                   </div>
@@ -1641,7 +1648,7 @@ export default function SettingsPage() {
                 <input type="text" value={businessData.address || ''} onChange={(e) => setBusinessData({ ...businessData, address: e.target.value })} className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold bg-slate-50 outline-none focus:border-blue-600" />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">الدولة</label>
                   <input type="text" value={businessData.country || 'مصر'} onChange={(e) => setBusinessData({ ...businessData, country: e.target.value })} className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold bg-slate-50 outline-none focus:border-blue-600" />
@@ -1676,7 +1683,7 @@ export default function SettingsPage() {
         {activeTab === 'users' && (
           <div className="space-y-4">
             {/* Header */}
-            <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-200">
+            <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-200 flex-wrap gap-2 flex-wrap">
               <div>
                 <h3 className="text-sm font-black text-slate-800">إدارة مستخدمي النشاط</h3>
                 <p className="text-xs text-slate-500 font-bold mt-1">
@@ -1684,7 +1691,7 @@ export default function SettingsPage() {
                 </p>
               </div>
               {!showNewUserForm && (
-                <button onClick={() => setShowNewUserForm(true)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5">
+                <button onClick={() => setShowNewUserForm(true)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 flex-wrap">
                   <Plus className="w-4 h-4" /><span>مستخدم جديد</span>
                 </button>
               )}
@@ -1693,7 +1700,7 @@ export default function SettingsPage() {
             {/* Add Form */}
             {showNewUserForm && (
               <form onSubmit={handleAddUser} className="bg-emerald-50 border-2 border-emerald-200 p-5 rounded-2xl space-y-3">
-                <div className="flex justify-between items-center border-b border-emerald-200 pb-2">
+                <div className="flex justify-between items-center border-b border-emerald-200 pb-2 flex-wrap gap-2 flex-wrap">
                   <h4 className="text-sm font-black text-emerald-900">إضافة مستخدم جديد</h4>
                   <button type="button" onClick={() => setShowNewUserForm(false)} className="text-emerald-700"><X className="w-5 h-5" /></button>
                 </div>
@@ -1720,7 +1727,7 @@ export default function SettingsPage() {
                     </select>
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <button type="submit" className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-xs">إضافة المستخدم</button>
                   <button type="button" onClick={() => setShowNewUserForm(false)} className="bg-slate-200 text-slate-700 font-bold px-5 py-2.5 rounded-xl text-xs">إلغاء</button>
                 </div>
@@ -1732,7 +1739,7 @@ export default function SettingsPage() {
               <p className="text-xs text-slate-400 text-center py-6 font-bold">لا يوجد مستخدمون</p>
             ) : (
               <div className="overflow-x-auto border-2 border-slate-200 rounded-2xl">
-                <table className="w-full text-right text-xs">
+                <table className="w-full text-right text-xs min-w-[600px]">
                   <thead className="bg-slate-800 text-white">
                     <tr>
                       <th className="p-3">#</th>
@@ -1770,7 +1777,7 @@ export default function SettingsPage() {
                           )}
                         </td>
                         <td className="p-3">
-                          <div className="flex gap-1 justify-center">
+                          <div className="flex gap-1 justify-center flex-wrap">
                             <button onClick={() => { setEditingUser({ ...u, _originalUsername: u.username }); setEditingUserPassword(''); }} className="text-blue-600 hover:bg-blue-50 p-2 rounded-lg" title="تعديل">
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
@@ -1795,7 +1802,7 @@ export default function SettingsPage() {
             {editingUser && (
               <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setEditingUser(null)}>
                 <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
-                  <div className="flex justify-between items-center border-b pb-3">
+                  <div className="flex justify-between items-center border-b pb-3 flex-wrap gap-2 flex-wrap">
                     <h3 className="text-base font-black text-slate-800">تعديل المستخدم: {editingUser.username}</h3>
                     <button onClick={() => setEditingUser(null)} className="text-slate-400"><X className="w-5 h-5" /></button>
                   </div>
@@ -1822,7 +1829,7 @@ export default function SettingsPage() {
                       <input type="text" value={editingUserPassword} onChange={(e) => setEditingUserPassword(e.target.value)} className="w-full border-2 border-amber-200 rounded-xl px-3 h-11 text-sm font-bold font-mono bg-amber-50" />
                     </div>
                   </div>
-                  <div className="flex gap-2 pt-2">
+                  <div className="flex gap-2 pt-2 flex-wrap">
                     <button onClick={handleUpdateUser} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-sm">حفظ التعديلات</button>
                     <button onClick={() => { setEditingUser(null); setEditingUserPassword(''); }} className="bg-slate-100 text-slate-700 font-bold px-5 py-3 rounded-xl text-sm">إلغاء</button>
                   </div>
@@ -1834,7 +1841,7 @@ export default function SettingsPage() {
             {changingPasswordUser && (
               <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setChangingPasswordUser(null)}>
                 <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
-                  <div className="flex justify-between items-center border-b pb-3">
+                  <div className="flex justify-between items-center border-b pb-3 flex-wrap gap-2 flex-wrap">
                     <h3 className="text-base font-black text-slate-800">تغيير كلمة المرور</h3>
                     <button onClick={() => setChangingPasswordUser(null)} className="text-slate-400"><X className="w-5 h-5" /></button>
                   </div>
@@ -1845,7 +1852,7 @@ export default function SettingsPage() {
                     <label className="block text-xs font-bold text-slate-700 mb-1">كلمة المرور الجديدة</label>
                     <input type="text" value={newPasswordForUser} onChange={(e) => setNewPasswordForUser(e.target.value)} className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold font-mono" />
                   </div>
-                  <div className="flex gap-2 pt-2">
+                  <div className="flex gap-2 pt-2 flex-wrap">
                     <button onClick={handleChangeUserPassword} className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 rounded-xl text-sm">تغيير كلمة المرور</button>
                     <button onClick={() => setChangingPasswordUser(null)} className="bg-slate-100 text-slate-700 font-bold px-5 py-3 rounded-xl text-sm">إلغاء</button>
                   </div>
@@ -1857,7 +1864,7 @@ export default function SettingsPage() {
 
         {activeTab === 'docs' && (
           <div className="space-y-4">
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs text-slate-700 font-bold flex items-center gap-2">
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs text-slate-700 font-bold flex items-center gap-2 flex-wrap">
               <BookOpen className="w-4 h-4 text-slate-700" />
               <span>اضغط على أي بطاقة لفتح الشرح التفصيلي.</span>
             </div>
@@ -1874,8 +1881,8 @@ export default function SettingsPage() {
               { k: '9', t: 'الأرشفة لا الحذف', d: 'أي عنصر له حركات مسجّلة لا يُحذف نهائياً حفاظاً على الأثر المحاسبي. يُؤرشف ويختفي من القوائم لكن يبقى في السجلات التاريخية. يمكن استعادته من زر "إظهار المؤرشف" في رأس الصفحة.' }
             ].map((item) => (
               <div key={item.k} className="bg-white border-2 border-slate-200 rounded-2xl overflow-hidden">
-                <button onClick={() => setExpandedDoc(expandedDoc === item.k ? null : item.k)} className="w-full text-right p-4 flex justify-between items-center hover:bg-slate-50 transition">
-                  <div className="flex items-center gap-3">
+                <button onClick={() => setExpandedDoc(expandedDoc === item.k ? null : item.k)} className="w-full text-right p-4 flex justify-between items-center hover:bg-slate-50 transition flex-wrap gap-2 flex-wrap">
+                  <div className="flex items-center gap-3 flex-wrap">
                     <span className="w-8 h-8 rounded-full bg-slate-900 text-white font-black text-xs flex items-center justify-center">{item.k}</span>
                     <span className="text-sm font-black text-slate-800">{item.t}</span>
                   </div>
@@ -1889,7 +1896,7 @@ export default function SettingsPage() {
               </div>
             ))}
 
-            <div className="bg-slate-50 border-2 border-slate-200 p-5 rounded-3xl flex flex-wrap justify-between items-center gap-3">
+            <div className="bg-slate-50 border-2 border-slate-200 p-5 rounded-3xl flex flex-wrap justify-between items-center gap-3 flex-wrap">
               <div>
                 <h4 className="text-sm font-black text-slate-800">إعادة تشغيل الجولة الإرشادية</h4>
                 <p className="text-[11px] text-slate-600 font-bold mt-1">تظهر الجولة تلقائياً أول مرة يفتح فيها المستخدم النظام على أي جهاز.</p>
@@ -1904,7 +1911,7 @@ export default function SettingsPage() {
       {showLockConfirm && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowLockConfirm(false)}>
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-2 text-amber-700 border-b pb-3">
+            <div className="flex items-center gap-2 text-amber-700 border-b pb-3 flex-wrap">
               <AlertTriangle className="w-6 h-6" />
               <h3 className="text-base font-bold">تأكيد اعتماد الأرصدة الافتتاحية</h3>
             </div>
@@ -1915,7 +1922,7 @@ export default function SettingsPage() {
               <p>• إدخال بضاعة الثلاجة في الدفعات (FIFO)</p>
               <p className="text-rose-700 pt-2">⚠️ لا يمكن التراجع بعد الاعتماد</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <button onClick={approveAndLock} className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 rounded-xl text-xs">تأكيد الاعتماد والقفل</button>
               <button onClick={() => setShowLockConfirm(false)} className="bg-slate-100 text-slate-700 font-bold px-4 py-3 rounded-xl text-xs">إلغاء</button>
             </div>

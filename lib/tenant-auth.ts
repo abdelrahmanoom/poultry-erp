@@ -1,11 +1,8 @@
-import { createClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase/admin';
 import bcrypt from 'bcryptjs';
 import { cookies } from 'next/headers';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+const supabase = createAdminClient();
 
 // ============================================================
 // TENANT AUTH (Business Users)
@@ -21,6 +18,7 @@ export interface TenantUser {
   tenant_name?: string;
   tenant_slug?: string;
   is_read_only?: boolean;
+  must_change_password?: boolean;
 }
 
 /**
@@ -127,6 +125,7 @@ export async function tenantLogin(username: string, password: string, slug?: str
       tenant_name: tenant.name,
       tenant_slug: tenant.slug,
       is_read_only: tenant.is_read_only || false,
+      must_change_password: matchedUser.must_change_password || false,
     } as TenantUser,
   };
 }
