@@ -13,9 +13,11 @@ const WINDOW_MINUTES = 15;
 
 function logAttempt(identifier: string, ip: string, success: boolean, ua: string) {
   // fire-and-forget — لا ننتظر
-  getSupabaseAdmin().from('login_attempts').insert([{
-    identifier, ip_address: ip, success, user_agent: ua,
-  }]).then(() => {}).catch(() => {});
+  Promise.resolve(
+    getSupabaseAdmin().from('login_attempts').insert([{
+      identifier, ip_address: ip, success, user_agent: ua,
+    }])
+  ).catch(() => {});
 }
 
 async function isRateLimited(identifier: string, ip: string): Promise<boolean> {
@@ -56,19 +58,19 @@ export async function POST(request: Request) {
 
     if (!result.success) {
       logAttempt(username, ip, false, ua);
-      logAction({
+      Promise.resolve(logAction({
         action: 'login_failed', userName: username, entityType: 'auth',
         details: { reason: result.error, slug: slug || null }, ipAddress: ip,
-      }).catch(() => {});
+      })).catch(() => {});
       return NextResponse.json(result, { status: 401 });
     }
 
     logAttempt(username, ip, true, ua);
-    logAction({
+    Promise.resolve(logAction({
       tenantId: result.user?.tenant_id, userId: result.user?.id,
       userName: result.user?.username || username, action: 'login',
       entityType: 'auth', details: { slug: slug || null }, ipAddress: ip,
-    }).catch(() => {});
+    })).catch(() => {});
 
     const jwtToken = signTenantJWT({
       tenant_id: result.user!.tenant_id,
