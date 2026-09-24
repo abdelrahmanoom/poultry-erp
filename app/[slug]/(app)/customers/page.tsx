@@ -184,11 +184,7 @@ export default function CustomersPage() {
   };
 
   const getProductName = (code: string) => {
-    const names: any = {
-      'P-1001': 'بانيه فصوص', 'P-1002': 'شيش طاووق', 'P-1003': 'وراك مخلية',
-      'P-1004': 'أجنحة', 'P-1005': 'كبد وقوانص', 'P-1006': 'هياكل وعظام',
-      'P-1007': 'شاورما صدور بالجلد', 'P-1008': 'شاورما كاملة بالجلد', 'P-1009': 'فراخ صندوق كاملة'
-    };
+    // Product names loaded from DB instead of hardcoded map
     return names[code] || code;
   };
 

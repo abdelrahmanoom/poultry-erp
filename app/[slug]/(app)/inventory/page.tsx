@@ -8,16 +8,7 @@ import DataTable from '@/components/DataTable';
 import { Package, Plus, X, Truck, ShoppingCart, Snowflake, Sun, RefreshCw } from 'lucide-react';
 import ProductFormModal from '@/components/ProductFormModal';
 
-const productToColumn: Record<string, string> = {
-  'P-1001': 'actual_fillet',
-  'P-1002': 'actual_thighs',
-  'P-1003': 'actual_wings',
-  'P-1004': 'actual_livers',
-  'P-1005': 'actual_carcass',
-  'P-1006': 'actual_shawarma_breast',
-  'P-1007': 'actual_shawarma_whole',
-  'P-1008': 'actual_whole_box'
-};
+// productToColumn removed — use products JSONB directly
 
 export default function InventoryPage() {
   const supabase = createClient();
@@ -65,17 +56,20 @@ export default function InventoryPage() {
     setProductBatches([]);
     setProductSales([]);
 
-    const columnName = productToColumn[prod.product_code];
-
-    if (columnName) {
+    {
       const { data: bData } = await supabase
         .from('yield_processing')
         .select('*, batches(*)')
         .eq('tenant_id', getCurrentTenantId())
-        .gt(columnName, 0)
         .order('created_at', { ascending: false })
-        .limit(8);
-      if (bData) setProductBatches(bData);
+        .limit(20);
+      if (bData) {
+        const filtered = bData.filter((row: any) => {
+          const q = Number(row.products?.[prod.product_code] || 0);
+          return q > 0;
+        }).slice(0, 8);
+        setProductBatches(filtered);
+      }
     }
 
     const { data: sData } = await supabase

@@ -7,14 +7,17 @@ import { Wallet, TrendingUp, AlertTriangle, Package, Scissors, Activity } from '
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const YIELD_MAP = [
-  { key: 'actual_fillet', label: 'بانيه فصوص' },
-  { key: 'actual_thighs', label: 'وراك مخلية' },
-  { key: 'actual_wings', label: 'أجنحة' },
-  { key: 'actual_livers', label: 'كبد وقوانص' },
-  { key: 'actual_carcass', label: 'هياكل وعظام' },
-  { key: 'actual_shawarma_breast', label: 'شاورما صدور' },
-  { key: 'actual_shawarma_whole', label: 'شاورما كاملة' },
-  { key: 'actual_whole_box', label: 'فراخ صندوق' },
+  { key: 'P-1001', label: 'بانيه' },
+  { key: 'P-1002', label: 'شيش طاووق' },
+  { key: 'P-1003', label: 'وراك' },
+  { key: 'P-1004', label: 'صدور بالعظم' },
+  { key: 'P-1005', label: 'أجنحة' },
+  { key: 'P-1006', label: 'رقاب' },
+  { key: 'P-1007', label: 'هياكل' },
+  { key: 'P-1008', label: 'كبد وقوانص' },
+  { key: 'P-1009', label: 'شاورما صدور' },
+  { key: 'P-1010', label: 'شاورما كاملة' },
+  { key: 'P-1011', label: 'فراخ صندوق' },
 ];
 
 export default function DashboardPage() {
@@ -108,13 +111,9 @@ export default function DashboardPage() {
     if (batch) {
       const { data: yp2 } = await supabase.from('yield_processing').select('*').eq('tenant_id', getCurrentTenantId()).eq('batch_id', batch.id).maybeSingle();
       if (yp2) {
-        const codeMap: any = {
-          actual_fillet: 'P-1001', actual_thighs: 'P-1003', actual_wings: 'P-1004',
-          actual_livers: 'P-1005', actual_carcass: 'P-1006', actual_shawarma_breast: 'P-1007',
-          actual_shawarma_whole: 'P-1008', actual_whole_box: 'P-1009'
-        };
-        Object.entries(codeMap).forEach(([k, v]) => {
-          if (Number((yp2 as any)[k] || 0) > 0) producedCodes.add(v as string);
+        const productsObj = (yp2 as any).products || {};
+        Object.entries(productsObj).forEach(([code, qty]) => {
+          if (Number(qty) > 0) producedCodes.add(code);
         });
       }
     }
