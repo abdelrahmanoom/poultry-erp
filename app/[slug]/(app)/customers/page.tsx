@@ -25,6 +25,7 @@ export default function CustomersPage() {
   const [editingCustomer, setEditingCustomer] = useState<any>(null);
   const [deleteModal, setDeleteModal] = useState<any>(null);
   const [invoiceItems, setInvoiceItems] = useState<any[]>([]);
+  const [productsMap, setProductsMap] = useState<Record<string, string>>({});
 
   const showToast = (msg: string, type = 'success') => {
     setToast({ msg, type });
@@ -58,7 +59,23 @@ export default function CustomersPage() {
     if (data) setCustomers(data);
   };
 
-  useEffect(() => { loadCustomers(); loadTreasuries(); }, []);
+  useEffect(() => {
+    loadCustomers();
+    loadTreasuries();
+    loadProductsMap();
+  }, []);
+
+  const loadProductsMap = async () => {
+    const { data } = await supabase
+      .from('inventory')
+      .select('product_code, product_name_ar')
+      .eq('tenant_id', getCurrentTenantId());
+    if (data) {
+      const m: Record<string, string> = {};
+      data.forEach((p: any) => { m[p.product_code] = p.product_name_ar; });
+      setProductsMap(m);
+    }
+  };
 
   const buildLedger = async (cust: any) => {
     const { data: invs } = await supabase.from('sales_invoices').select('*').eq('tenant_id', getCurrentTenantId()).eq('customer_name', cust.name).order('created_at');
@@ -184,8 +201,7 @@ export default function CustomersPage() {
   };
 
   const getProductName = (code: string) => {
-    // Product names loaded from DB instead of hardcoded map
-    return names[code] || code;
+    return productsMap[code] || code;
   };
 
 
