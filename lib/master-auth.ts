@@ -2,7 +2,9 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import bcrypt from 'bcryptjs';
 import { cookies } from 'next/headers';
 
-const supabase = createAdminClient();
+function getSupabase() {
+  return createAdminClient();
+}
 
 // ============================================================
 // MASTER AUTH
@@ -19,7 +21,7 @@ export interface MasterUser {
  * التحقق من بيانات Master وتسجيل الدخول
  */
 export async function masterLogin(email: string, password: string) {
-  const { data: user, error } = await supabase
+  const { data: user, error } = await getSupabase()
     .from('master_users')
     .select('*')
     .eq('email', email.trim().toLowerCase())
@@ -39,7 +41,7 @@ export async function masterLogin(email: string, password: string) {
   // إنشاء session token
   const token = crypto.randomUUID() + '-' + Date.now();
 
-  const { error: sessErr } = await supabase.from('master_sessions').insert([{
+  const { error: sessErr } = await getSupabase().from('master_sessions').insert([{
     master_id: user.id,
     token,
     expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
@@ -50,7 +52,7 @@ export async function masterLogin(email: string, password: string) {
   }
 
   // تحديث last_login
-  await supabase.from('master_users').update({ last_login: new Date().toISOString() }).eq('id', user.id);
+  await getSupabase().from('master_users').update({ last_login: new Date().toISOString() }).eq('id', user.id);
 
   return {
     success: true,
@@ -72,7 +74,7 @@ export async function getCurrentMaster(): Promise<MasterUser | null> {
   const token = cookieStore.get('master_token')?.value;
   if (!token) return null;
 
-  const { data: session } = await supabase
+  const { data: session } = await getSupabase()
     .from('master_sessions')
     .select('master_id, expires_at, last_activity')
     .eq('token', token)
@@ -85,11 +87,11 @@ export async function getCurrentMaster(): Promise<MasterUser | null> {
   const IDLE_LIMIT_MS = 30 * 60 * 1000;
   const lastActivity = session.last_activity ? new Date(session.last_activity).getTime() : Date.now();
   if (Date.now() - lastActivity > IDLE_LIMIT_MS) {
-    await supabase.from('master_sessions').delete().eq('token', token);
+    await getSupabase().from('master_sessions').delete().eq('token', token);
     return null;
   }
 
-  const { data: user } = await supabase
+  const { data: user } = await getSupabase()
     .from('master_users')
     .select('id, email, full_name, phone, is_active')
     .eq('id', session.master_id)
@@ -99,7 +101,7 @@ export async function getCurrentMaster(): Promise<MasterUser | null> {
   if (!user) return null;
 
   // تحديث last_activity
-  await supabase.from('master_sessions').update({ last_activity: new Date().toISOString() }).eq('token', token);
+  await getSupabase().from('master_sessions').update({ last_activity: new Date().toISOString() }).eq('token', token);
 
   return user as MasterUser;
 }
@@ -111,7 +113,7 @@ export async function masterLogout() {
   const cookieStore = await cookies();
   const token = cookieStore.get('master_token')?.value;
   if (token) {
-    await supabase.from('master_sessions').delete().eq('token', token);
+    await getSupabase().from('master_sessions').delete().eq('token', token);
   }
 }
 
@@ -120,6 +122,6 @@ export async function masterLogout() {
  */
 export async function changeMasterPassword(masterId: number, newPassword: string) {
   const hash = await bcrypt.hash(newPassword, 10);
-  const { error } = await supabase.from('master_users').update({ password_hash: hash }).eq('id', masterId);
+  const { error } = await getSupabase().from('master_users').update({ password_hash: hash }).eq('id', masterId);
   return { success: !error, error: error?.message };
 }

@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import { getCurrentTenantUser, changeUserPassword } from '@/lib/tenant-auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 
-const supabase = createAdminClient();
+function getSupabase() {
+  return createAdminClient();
+}
 
 export async function POST(request: Request) {
   const user = await getCurrentTenantUser();
@@ -30,7 +32,7 @@ export async function POST(request: Request) {
   }
 
   // إلغاء flag الإلزامي
-  await supabase.from('system_users')
+  await getSupabase().from('system_users')
     .update({ must_change_password: false })
     .eq('id', user.id);
 

@@ -3,7 +3,9 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getCurrentMaster } from '@/lib/master-auth';
 import { logAction, getRequestIp } from '@/lib/audit';
 
-const supabaseAdmin = createAdminClient();
+function getSupabaseAdmin() {
+  return createAdminClient();
+}
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const ip = getRequestIp(request);
@@ -23,7 +25,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'قيمة is_protected مطلوبة' }, { status: 400 });
   }
 
-  const { error } = await supabaseAdmin
+  const { error } = await getSupabaseAdmin()
     .from('tenants')
     .update({ is_protected })
     .eq('id', tenantId);

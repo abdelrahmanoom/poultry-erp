@@ -4,7 +4,9 @@ import bcrypt from 'bcryptjs';
 import { getCurrentMaster } from '@/lib/master-auth';
 import { logAction, getRequestIp } from '@/lib/audit';
 
-const supabaseAdmin = createAdminClient();
+function getSupabaseAdmin() {
+  return createAdminClient();
+}
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const master = await getCurrentMaster();
@@ -14,7 +16,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const tenantId = Number(id);
   if (!tenantId || isNaN(tenantId)) return NextResponse.json({ error: 'رقم غير صحيح' }, { status: 400 });
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from('system_users')
     .select('id, username, full_name, role, is_active')
     .eq('tenant_id', tenantId)
@@ -37,7 +39,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'لم يتم اختيار أي مستخدم' }, { status: 400 });
   }
 
-  const { data: validUsers } = await supabaseAdmin
+  const { data: validUsers } = await getSupabaseAdmin()
     .from('system_users')
     .select('id')
     .eq('tenant_id', tenantId)
@@ -48,7 +50,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const hash = await bcrypt.hash('123456', 10);
-  const { error } = await supabaseAdmin
+  const { error } = await getSupabaseAdmin()
     .from('system_users')
     .update({ password_hash: hash })
     .in('id', userIds)
@@ -56,7 +58,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  await supabaseAdmin.from('tenant_sessions').delete().in('user_id', userIds);
+  await getSupabaseAdmin().from('tenant_sessions').delete().in('user_id', userIds);
 
   await logAction({
     tenantId: tenantId,

@@ -1,6 +1,8 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 
-const supabase = createAdminClient();
+function getSupabase() {
+  return createAdminClient();
+}
 
 export type AuditAction =
   | 'login'
@@ -32,7 +34,7 @@ interface LogParams {
 
 export async function logAction(params: LogParams) {
   try {
-    await supabase.from('audit_log').insert([{
+    await getSupabase().from('audit_log').insert([{
       tenant_id: params.tenantId ?? null,
       user_id: params.userId ?? null,
       user_name: params.userName ?? null,

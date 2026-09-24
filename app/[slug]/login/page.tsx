@@ -9,30 +9,37 @@ export default function SlugLoginPage() {
   const params = useParams();
   const slug = String(params.slug || '');
 
-  const [username, setUsername] = useState(process.env.NEXT_PUBLIC_DEV_USERNAME || '');
-  const [password, setPassword] = useState(process.env.NEXT_PUBLIC_DEV_PASSWORD || '');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [tenantName, setTenantName] = useState<string>('');
 
-  // جلب اسم النشاط من slug
+  // جلب اسم النشاط من API (admin client — يتجاوز RLS)
   useEffect(() => {
     if (!slug) return;
     (async () => {
       try {
-        const { createClient } = await import('@/lib/supabase/client');
-        const supabase = createClient();
-        const { data } = await supabase
-          .from('tenants')
-          .select('name, is_active')
-          .eq('slug', slug)
-          .eq('is_active', true)
-          .maybeSingle();
-        if (data) setTenantName(data.name);
-        else setError('النشاط غير موجود أو غير مفعّل');
-      } catch (e) {}
+        const res = await fetch('/api/tenants/by-slug/' + slug);
+        if (!res.ok) {
+          setError('النشاط غير موجود أو غير مفعّل');
+          return;
+        }
+        const data = await res.json();
+        if (data?.name) {
+          setTenantName(data.name);
+          // حفظ slug تلقائياً للزيارات القادمة
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('last_tenant_slug', slug);
+          }
+        } else {
+          setError('النشاط غير موجود أو غير مفعّل');
+        }
+      } catch (e) {
+        setError('تعذّر الاتصال بالخادم');
+      }
     })();
   }, [slug]);
 
@@ -69,7 +76,8 @@ export default function SlugLoginPage() {
         must_change_password: data.user.must_change_password || false,
       }));
 
-      router.push('/' + userSlug + '/dashboard');
+      localStorage.setItem('last_tenant_slug', userSlug);
+      window.location.href = '/' + userSlug + '/dashboard';
     } catch (err: any) {
       setError('حدث خطأ أثناء الاتصال بالخادم');
       setLoading(false);
@@ -102,12 +110,13 @@ export default function SlugLoginPage() {
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-4">
+        <form onSubmit={handleLogin} action="/api/auth/login" method="POST" autoComplete="on" className="space-y-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1.5">اسم المستخدم</label>
             <div className="relative">
               <input
                 type="text"
+                name="username"
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -123,6 +132,7 @@ export default function SlugLoginPage() {
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
+                name="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

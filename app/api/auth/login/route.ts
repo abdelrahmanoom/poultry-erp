@@ -4,23 +4,25 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { logAction } from '@/lib/audit';
 import { signTenantJWT } from '@/lib/jwt';
 
-const supabaseAdmin = createAdminClient();
+function getSupabaseAdmin() {
+  return createAdminClient();
+}
 
 const MAX_ATTEMPTS = 5;
 const WINDOW_MINUTES = 15;
 
 async function logAttempt(identifier: string, ip: string, success: boolean, ua: string) {
-  await supabaseAdmin.from('login_attempts').insert([{
+  await getSupabaseAdmin().from('login_attempts').insert([{
     identifier, ip_address: ip, success, user_agent: ua,
   }]);
 }
 
 async function isRateLimited(identifier: string, ip: string): Promise<boolean> {
   const since = new Date(Date.now() - WINDOW_MINUTES * 60 * 1000).toISOString();
-  const { count: userFails } = await supabaseAdmin
+  const { count: userFails } = await getSupabaseAdmin()
     .from('login_attempts').select('*', { count: 'exact', head: true })
     .eq('identifier', identifier).eq('success', false).gte('created_at', since);
-  const { count: ipFails } = await supabaseAdmin
+  const { count: ipFails } = await getSupabaseAdmin()
     .from('login_attempts').select('*', { count: 'exact', head: true })
     .eq('ip_address', ip).eq('success', false).gte('created_at', since);
   return (userFails || 0) >= MAX_ATTEMPTS || (ipFails || 0) >= MAX_ATTEMPTS * 2;

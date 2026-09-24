@@ -3,7 +3,9 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getCurrentMaster } from '@/lib/master-auth';
 import { logAction, getRequestIp } from '@/lib/audit';
 
-const supabaseAdmin = createAdminClient();
+function getSupabaseAdmin() {
+  return createAdminClient();
+}
 
 const TABLES = [
   'archives', 'sales_items', 'yield_processing', 'ready_purchases',
@@ -22,7 +24,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const tenantId = Number(id);
   if (!tenantId || isNaN(tenantId)) return NextResponse.json({ error: 'رقم غير صحيح' }, { status: 400 });
   // فحص الحماية الديناميكية
-  const { data: tenant } = await supabaseAdmin
+  const { data: tenant } = await getSupabaseAdmin()
     .from('tenants')
     .select('is_protected, name')
     .eq('id', tenantId)
@@ -41,17 +43,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const errors: any[] = [];
   for (const table of TABLES) {
-    const { error } = await supabaseAdmin.from(table).delete().eq('tenant_id', tenantId);
+    const { error } = await getSupabaseAdmin().from(table).delete().eq('tenant_id', tenantId);
     if (error) errors.push({ table, error: error.message });
   }
 
-  await supabaseAdmin
+  await getSupabaseAdmin()
     .from('system_users')
     .delete()
     .eq('tenant_id', tenantId)
     .neq('role', 'admin');
 
-  await supabaseAdmin.from('tenant_sessions').delete().eq('tenant_id', tenantId);
+  await getSupabaseAdmin().from('tenant_sessions').delete().eq('tenant_id', tenantId);
 
   await logAction({
     tenantId: tenantId,

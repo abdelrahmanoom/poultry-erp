@@ -2,7 +2,9 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import bcrypt from 'bcryptjs';
 import { cookies } from 'next/headers';
 
-const supabase = createAdminClient();
+function getSupabase() {
+  return createAdminClient();
+}
 
 // ============================================================
 // TENANT AUTH (Business Users)
@@ -31,7 +33,7 @@ export async function tenantLogin(username: string, password: string, slug?: str
 
   // إذا أُرسل slug → حدد النشاط أولاً
   if (slug && slug.trim()) {
-    const { data: tenant } = await supabase
+    const { data: tenant } = await getSupabase()
       .from('tenants')
       .select('id, name, is_active')
       .eq('slug', slug.trim().toLowerCase())
@@ -44,7 +46,7 @@ export async function tenantLogin(username: string, password: string, slug?: str
     tenantFilterId = tenant.id;
   }
 
-  let query = supabase
+  let query = getSupabase()
     .from('system_users')
     .select('*')
     .eq('username', username.trim())
@@ -73,7 +75,7 @@ export async function tenantLogin(username: string, password: string, slug?: str
       if (valid) {
         // ترقية تلقائية إلى bcrypt
         const newHash = await bcrypt.hash(password, 10);
-        await supabase.from('system_users').update({ password_hash: newHash }).eq('id', u.id);
+        await getSupabase().from('system_users').update({ password_hash: newHash }).eq('id', u.id);
       }
     }
     if (valid) {
@@ -87,7 +89,7 @@ export async function tenantLogin(username: string, password: string, slug?: str
   }
 
   // جلب اسم الـ tenant
-  const { data: tenant } = await supabase
+  const { data: tenant } = await getSupabase()
     .from('tenants')
     .select('id, name, slug, is_read_only')
     .eq('id', matchedUser.tenant_id)
@@ -101,7 +103,7 @@ export async function tenantLogin(username: string, password: string, slug?: str
   // إنشاء session token
   const token = crypto.randomUUID() + '-' + Date.now();
 
-  const { error: sessErr } = await supabase.from('tenant_sessions').insert([{
+  const { error: sessErr } = await getSupabase().from('tenant_sessions').insert([{
     tenant_id: matchedUser.tenant_id,
     user_id: matchedUser.id,
     token,
@@ -138,7 +140,7 @@ export async function getCurrentTenantUser(): Promise<TenantUser | null> {
   const token = cookieStore.get('tenant_token')?.value;
   if (!token) return null;
 
-  const { data: session } = await supabase
+  const { data: session } = await getSupabase()
     .from('tenant_sessions')
     .select('user_id, tenant_id, expires_at, last_activity')
     .eq('token', token)
@@ -151,11 +153,11 @@ export async function getCurrentTenantUser(): Promise<TenantUser | null> {
   const IDLE_LIMIT_MS = 30 * 60 * 1000;
   const lastActivity = session.last_activity ? new Date(session.last_activity).getTime() : Date.now();
   if (Date.now() - lastActivity > IDLE_LIMIT_MS) {
-    await supabase.from('tenant_sessions').delete().eq('token', token);
+    await getSupabase().from('tenant_sessions').delete().eq('token', token);
     return null;
   }
 
-  const { data: user } = await supabase
+  const { data: user } = await getSupabase()
     .from('system_users')
     .select('id, username, full_name, role, permissions, tenant_id, is_active')
     .eq('id', session.user_id)
@@ -164,14 +166,14 @@ export async function getCurrentTenantUser(): Promise<TenantUser | null> {
 
   if (!user) return null;
 
-  const { data: tenant } = await supabase
+  const { data: tenant } = await getSupabase()
     .from('tenants')
     .select('name, slug, is_read_only')
     .eq('id', user.tenant_id)
     .maybeSingle();
 
   // تحديث last_activity
-  await supabase.from('tenant_sessions').update({ last_activity: new Date().toISOString() }).eq('token', token);
+  await getSupabase().from('tenant_sessions').update({ last_activity: new Date().toISOString() }).eq('token', token);
 
   return {
     ...user,
@@ -188,7 +190,7 @@ export async function tenantLogout() {
   const cookieStore = await cookies();
   const token = cookieStore.get('tenant_token')?.value;
   if (token) {
-    await supabase.from('tenant_sessions').delete().eq('token', token);
+    await getSupabase().from('tenant_sessions').delete().eq('token', token);
   }
 }
 
@@ -196,7 +198,7 @@ export async function tenantLogout() {
  * تغيير كلمة مرور المستخدم
  */
 export async function changeUserPassword(userId: number, currentPassword: string, newPassword: string) {
-  const { data: user } = await supabase.from('system_users').select('password_hash').eq('id', userId).maybeSingle();
+  const { data: user } = await getSupabase().from('system_users').select('password_hash').eq('id', userId).maybeSingle();
   if (!user) return { success: false, error: 'المستخدم غير موجود' };
 
   // التحقق من كلمة المرور الحالية
@@ -210,6 +212,6 @@ export async function changeUserPassword(userId: number, currentPassword: string
 
   // تحديث
   const hash = await bcrypt.hash(newPassword, 10);
-  const { error } = await supabase.from('system_users').update({ password_hash: hash }).eq('id', userId);
+  const { error } = await getSupabase().from('system_users').update({ password_hash: hash }).eq('id', userId);
   return { success: !error, error: error?.message };
 }
