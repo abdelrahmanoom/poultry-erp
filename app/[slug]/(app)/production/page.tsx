@@ -27,7 +27,7 @@ export default function ProductionPage() {
   const [toast, setToast] = useState<{ msg: string; type: string } | null>(null);
 
   // بيانات الدفعة
-  const [pathway, setPathway] = useState('');
+  const [pathway, setPathway] = useState('freeform');
   const [marketPrice, setMarketPrice] = useState<any>('');
   const [execPrice, setExecPrice] = useState<any>('');
   const [liveWeight, setLiveWeight] = useState<any>('');
@@ -99,7 +99,6 @@ export default function ProductionPage() {
       const { data: paths } = await supabase.from('slaughter_pathways').select('*').eq('is_active', true).order('pathway_code');
       if (paths && paths.length > 0) {
         setPathwaysList(paths);
-        setPathway(paths[0].pathway_code);
       }
 
       const tid = getCurrentTenantId();
@@ -122,7 +121,7 @@ export default function ProductionPage() {
         _virtual: true,
       }));
 
-      if (!pathway) {
+      if (!pathway || pathway === 'freeform') {
         setPathwayProducts(buildVirtualList());
         return;
       }
@@ -369,35 +368,16 @@ export default function ProductionPage() {
         {/* المسار */}
         <div className="bg-white p-6 rounded-3xl border border-slate-200">
           <label className="block text-xs font-bold text-slate-700 mb-2">مسار التقطيع:</label>
-          {pathwaysList.length === 0 ? (
-            <div className="bg-blue-50 border-2 border-blue-200 p-5 rounded-2xl space-y-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="bg-blue-200 p-1.5 rounded-lg">
-                  <AlertTriangle className="w-4 h-4 text-blue-800" />
-                </div>
-                <h3 className="text-sm font-black text-blue-900">لا يوجد مسار محفوظ بعد</h3>
-              </div>
-              <p className="text-xs font-bold text-blue-800 leading-relaxed">
-                املأ الأوزان أدناه مباشرة، ثم اضغط زر
-                <b className="text-blue-900"> "حفظ هذه الأصناف كمسار جديد" </b>
-                أسفل البطاقة لإنشاء مسار للاستخدام المستقبلي.
-              </p>
-              <a href="/settings?tab=pathways&group=operations" className="inline-flex items-center gap-1.5 bg-white hover:bg-blue-100 text-blue-700 font-bold px-4 py-2.5 rounded-xl text-xs border-2 border-blue-300 transition flex-wrap">
-                <span>فتح مسارات التجهيز</span>
-                <span>←</span>
-              </a>
-            </div>
-          ) : (
-            <select
-              value={pathway}
-              onChange={(e) => setPathway(e.target.value)}
-              className="w-full border-2 border-slate-200 rounded-2xl px-4 text-sm font-bold bg-slate-50 h-12 outline-none focus:border-blue-600"
-            >
-              {pathwaysList.map((p: any) => (
-                <option key={p.pathway_code} value={p.pathway_code}>{p.name_ar}</option>
-              ))}
-            </select>
-          )}
+          <select
+            value={pathway}
+            onChange={(e) => setPathway(e.target.value)}
+            className="w-full border-2 border-slate-200 rounded-2xl px-4 text-sm font-bold bg-slate-50 h-12 outline-none focus:border-blue-600"
+          >
+            <option value="freeform">✨ شروة حرة (كل الأصناف)</option>
+            {pathwaysList.map((p: any) => (
+              <option key={p.pathway_code} value={p.pathway_code}>{p.name_ar}</option>
+            ))}
+          </select>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-4">
@@ -521,7 +501,7 @@ export default function ProductionPage() {
             )}
             {pathwayProducts.length === 0 ? (
               <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-xs font-bold text-amber-900">
-                المسار لا يحتوي على أصناف. أضفها من /settings → مسارات التجهيز.
+                لا توجد أصناف. أضف صنفاً من الزر أعلاه.
               </div>
             ) : (
               <>
@@ -582,7 +562,8 @@ export default function ProductionPage() {
                   <button
                     type="button"
                     onClick={() => setShowSavePathwayModal(true)}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-3 rounded-xl text-sm flex items-center justify-center gap-2 shadow mt-2 flex-wrap"
+                    disabled={actualYield <= 0}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold px-5 py-3 rounded-xl text-sm flex items-center justify-center gap-2 shadow mt-2 flex-wrap"
                   >
                     <Save className="w-4 h-4" />
                     <span>حفظ هذه الأصناف كمسار جديد</span>
@@ -593,7 +574,7 @@ export default function ProductionPage() {
           </div>
         </div>
 
-        <button type="submit" disabled={loading || pathwaysList.length === 0} className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-black py-4 rounded-2xl text-sm shadow-lg flex items-center justify-center gap-2 flex-wrap">
+        <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-black py-4 rounded-2xl text-sm shadow-lg flex items-center justify-center gap-2 flex-wrap">
           {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
           {loading ? 'جاري الحفظ...' : 'اعتماد أمر وحفظ الإنتاج'}
         </button>
