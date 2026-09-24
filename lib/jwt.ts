@@ -10,7 +10,11 @@ export interface JWTClaims {
 }
 
 export function signTenantJWT(claims: JWTClaims): string {
-  return jwt.sign(claims, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+  return jwt.sign(
+    { ...claims, role: 'authenticated' },
+    JWT_SECRET,
+    { expiresIn: JWT_EXPIRY }
+  );
 }
 
 export function verifyTenantJWT(token: string): JWTClaims | null {

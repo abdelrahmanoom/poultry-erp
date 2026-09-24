@@ -11,10 +11,7 @@ const WINDOW_MINUTES = 15;
 
 async function logAttempt(identifier: string, ip: string, success: boolean, ua: string) {
   await supabaseAdmin.from('login_attempts').insert([{
-    identifier,
-    ip_address: ip,
-    success,
-    user_agent: ua,
+    identifier, ip_address: ip, success, user_agent: ua,
   }]);
 }
 
@@ -43,10 +40,7 @@ export async function POST(request: Request) {
 
     if (await isRateLimited(username, ip)) {
       await logAttempt(username, ip, false, ua);
-      return NextResponse.json({
-        success: false,
-        error: 'محاولات دخول كثيرة — حاول بعد 15 دقيقة'
-      }, { status: 429 });
+      return NextResponse.json({ success: false, error: 'محاولات دخول كثيرة — حاول بعد 15 دقيقة' }, { status: 429 });
     }
 
     const result = await tenantLogin(username, password, slug);
@@ -54,24 +48,17 @@ export async function POST(request: Request) {
     if (!result.success) {
       await logAttempt(username, ip, false, ua);
       await logAction({
-        action: 'login_failed',
-        userName: username,
-        entityType: 'auth',
-        details: { reason: result.error, slug: slug || null },
-        ipAddress: ip,
+        action: 'login_failed', userName: username, entityType: 'auth',
+        details: { reason: result.error, slug: slug || null }, ipAddress: ip,
       });
       return NextResponse.json(result, { status: 401 });
     }
 
     await logAttempt(username, ip, true, ua);
     await logAction({
-      tenantId: result.user?.tenant_id,
-      userId: result.user?.id,
-      userName: result.user?.username || username,
-      action: 'login',
-      entityType: 'auth',
-      details: { slug: slug || null },
-      ipAddress: ip,
+      tenantId: result.user?.tenant_id, userId: result.user?.id,
+      userName: result.user?.username || username, action: 'login',
+      entityType: 'auth', details: { slug: slug || null }, ipAddress: ip,
     });
 
     const jwtToken = signTenantJWT({
@@ -82,29 +69,22 @@ export async function POST(request: Request) {
 
     const response = NextResponse.json({ success: true, user: result.user });
 
+    // الجلسة الأساسية — httpOnly (محمية)
     response.cookies.set('tenant_token', result.token!, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60,
-      path: '/',
+      httpOnly: true, secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax', maxAge: 7 * 24 * 60 * 60, path: '/',
     });
 
+    // JWT — قابل للقراءة (Supabase client يحتاجه)
     response.cookies.set('tenant_jwt', jwtToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60,
-      path: '/',
+      httpOnly: false, secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax', maxAge: 7 * 24 * 60 * 60, path: '/',
     });
 
     if (result.user?.tenant_slug) {
       response.cookies.set('tenant_slug', result.user.tenant_slug, {
-        httpOnly: false,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60,
-        path: '/',
+        httpOnly: false, secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax', maxAge: 7 * 24 * 60 * 60, path: '/',
       });
     }
 
