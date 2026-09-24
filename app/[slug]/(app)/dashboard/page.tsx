@@ -19,7 +19,7 @@ const YIELD_MAP = [
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState('overview');
-  const [exchangePrice, setExchangePrice] = useState(85);
+  const [exchangePrice, setExchangePrice] = useState<any>('');
   const [cashBalance, setCashBalance] = useState(0);
   const [receivables, setReceivables] = useState(0);
   const [payables, setPayables] = useState(0);

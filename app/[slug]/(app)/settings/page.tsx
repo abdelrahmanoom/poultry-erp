@@ -155,7 +155,7 @@ export default function SettingsPage() {
 
     // تفاصيل النشاط
     const { data: bizData } = await supabase.from('tenants').select('*').eq('id', 1).maybeSingle();
-    if (bizData) setBusinessData(bizData);
+    if (bizData) setBusinessData({ ...bizData, __oldSlug: bizData.slug });
 
     // المستخدمون
     const { data: usersData } = await supabase.from('system_users').select('id, username, full_name, role, tenant_id, is_active, created_at').eq('tenant_id', getCurrentTenantId()).order('id');
@@ -584,6 +584,10 @@ export default function SettingsPage() {
 
   const handleSaveBusiness = async () => {
     if (!businessData) return;
+
+    const oldSlug = (businessData as any).__oldSlug || businessData.slug;
+    const newSlug = businessData.slug;
+
     setBusinessSaving(true);
     const { error } = await supabase.from('tenants').update({
       name: businessData.name,
@@ -601,7 +605,35 @@ export default function SettingsPage() {
       updated_at: new Date().toISOString(),
     }).eq('id', 1);
     setBusinessSaving(false);
+
     if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+
+    // إذا تغيّر الـ slug → حدّث localStorage + cookie + أعد التوجيه
+    if (newSlug && oldSlug && newSlug !== oldSlug) {
+      localStorage.setItem('last_tenant_slug', newSlug);
+
+      // تحديث cookie tenant_slug
+      document.cookie = 'tenant_slug=' + newSlug + '; path=/; max-age=' + (7 * 24 * 60 * 60) + '; SameSite=Lax';
+
+      // تحديث بيانات الجلسة
+      const sessionStr = localStorage.getItem('erp_user_display') || sessionStorage.getItem('erp_user_display');
+      if (sessionStr) {
+        try {
+          const parsed = JSON.parse(sessionStr);
+          parsed.tenant_slug = newSlug;
+          const targetStorage = localStorage.getItem('erp_user_display') ? localStorage : sessionStorage;
+          targetStorage.setItem('erp_user_display', JSON.stringify(parsed));
+        } catch {}
+      }
+
+      showToast('تم حفظ تفاصيل النشاط — سيُحدَّث الرابط');
+
+      setTimeout(() => {
+        window.location.href = '/' + newSlug + '/settings';
+      }, 1500);
+      return;
+    }
+
     showToast('تم حفظ تفاصيل النشاط');
     loadData();
   };

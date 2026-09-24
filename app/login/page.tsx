@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Lock, User, AlertCircle, Eye, EyeOff, Boxes, Hash } from 'lucide-react';
 
 export default function LoginPage() {
-  const [slug, setSlug] = useState('unknown');
+  const [slug, setSlug] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
@@ -13,6 +13,13 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
+
+  // قراءة slug من localStorage عند فتح الصفحة
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const saved = localStorage.getItem('last_tenant_slug');
+    if (saved && !slug) setSlug(saved);
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,7 +58,11 @@ export default function LoginPage() {
         must_change_password: data.user.must_change_password || false,
       }));
 
-      router.push('/' + userSlug + '/dashboard');
+      // حفظ الـ slug للزيارة القادمة (للمتصفح + لنا)
+      localStorage.setItem('last_tenant_slug', userSlug);
+
+      // window.location.href → يخبر المتصفح أن الدخول نجح → يعرض "حفظ كلمة المرور"
+      window.location.href = '/' + userSlug + '/dashboard';
     } catch (err: any) {
       setError('حدث خطأ أثناء الاتصال بالخادم');
       setLoading(false);
@@ -81,7 +92,7 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-4">
+        <form onSubmit={handleLogin} action="/api/auth/login" method="POST" autoComplete="on" className="space-y-4">
 
           {/* معرّف النشاط */}
           <div>
@@ -89,6 +100,7 @@ export default function LoginPage() {
             <div className="relative">
               <input
                 type="text"
+                name="tenant_slug"
                 required
                 value={slug}
                 onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
@@ -106,6 +118,7 @@ export default function LoginPage() {
             <div className="relative">
               <input
                 type="text"
+                name="username"
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -123,6 +136,7 @@ export default function LoginPage() {
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
+                name="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
