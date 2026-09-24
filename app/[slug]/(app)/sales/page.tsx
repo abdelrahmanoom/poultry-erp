@@ -6,6 +6,7 @@ import { getCurrentTenantId } from '@/lib/tenant-client';
 import { AlertTriangle } from 'lucide-react';
 import DataTable from '@/components/DataTable';
 import Autocomplete from '@/components/Autocomplete';
+import { arError } from '@/lib/error-translator';
 
 export default function SalesPage() {
   const supabase = createClient();
@@ -133,7 +134,7 @@ export default function SalesPage() {
       p_reason: cancelReason.trim()
     });
     if (error) {
-      showToast('خطأ: ' + error.message, 'error');
+      showToast(arError(error), 'error');
       return;
     }
     showToast('تم إلغاء الفاتورة وعكس أثرها المحاسبي');
@@ -225,6 +226,26 @@ export default function SalesPage() {
       showToast('رقم الهاتف غير صحيح — 11 خانة يبدأ بـ 010/011/012/015', 'error');
       return;
     }
+    // ⚠️ تحقق من الكميات قبل الإرسال
+    for (const item of items) {
+      const qty = Number(item.qty || 0);
+      if (qty <= 0) {
+        const prod = availableProducts.find((p: any) => p.product_code === item.product_code);
+        showToast('الكمية غير صحيحة للصنف: ' + (prod?.product_name_ar || item.product_code), 'error');
+        return;
+      }
+      const prod = availableProducts.find((p: any) => p.product_code === item.product_code);
+      const avail = prod ? Number(prod.stock_kg || 0) : 0;
+      if (qty > avail) {
+        showToast(
+          'الكمية المطلوبة من "' + (prod?.product_name_ar || item.product_code) + 
+          '" (' + qty + ' كجم) أكبر من المتاح (' + avail.toFixed(1) + ' كجم)',
+          'error'
+        );
+        return;
+      }
+    }
+
     const deviations = checkPriceDeviations();
     if (!bypassDeviation && deviations.length > 0) {
       setPriceDeviations(deviations);
@@ -355,7 +376,7 @@ export default function SalesPage() {
         await supabase.from('sales_items').delete().eq('tenant_id', getCurrentTenantId()).eq('invoice_id', savedInvoiceId);
         await supabase.from('sales_invoices').delete().eq('tenant_id', getCurrentTenantId()).eq('id', savedInvoiceId);
       }
-      showToast('خطأ في حفظ الفاتورة: ' + err.message, 'error');
+      showToast(arError(err), 'error');
     }
   };
 

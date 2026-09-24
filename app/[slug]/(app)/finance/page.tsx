@@ -7,6 +7,7 @@ import DataTable from '@/components/DataTable';
 import { Scale, FileSpreadsheet, Printer, Lock, RefreshCw, BarChart3, PieChart as PieChartIcon, TrendingUp, Download, Columns3, Search, X, AlertTriangle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import * as XLSX from 'xlsx-js-style';
+import { arError } from '@/lib/error-translator';
 
 export default function ReportsPage() {
   const supabase = createClient();
@@ -53,7 +54,7 @@ export default function ReportsPage() {
     setLoading(true);
     const { data, error } = await supabase.rpc('get_financial_summary');
     if (error) {
-      showToast('خطأ في جلب البيانات: ' + error.message, 'error');
+      showToast(arError(error), 'error');
     } else if (data && data.length > 0) {
       setSummary(data[0]);
     }

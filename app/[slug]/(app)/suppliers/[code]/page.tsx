@@ -8,6 +8,7 @@ import Breadcrumbs from '@/components/Breadcrumbs';
 import EntityActions from '@/components/EntityActions';
 import DataTable from '@/components/DataTable';
 import { ArrowRight, Phone, Wallet, TrendingUp, FileText, X, CheckCircle } from 'lucide-react';
+import { arError } from '@/lib/error-translator';
 
 export default function SupplierFilePage() {
   const params = useParams();
@@ -94,7 +95,7 @@ export default function SupplierFilePage() {
       setSelectedTreasury('');
       await load();
     } catch (err: any) {
-      alert('خطأ: ' + err.message);
+      alert(arError(err));
     } finally {
       setSavingPayment(false);
     }

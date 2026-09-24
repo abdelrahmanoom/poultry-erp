@@ -7,6 +7,7 @@ import { getCurrentTenantId } from '@/lib/tenant-client';
 import { Wallet, Building2, UserCheck, Plus, X, RefreshCw, TrendingDown, TrendingUp, CheckCircle } from 'lucide-react';
 import DataTable from '@/components/DataTable';
 import Autocomplete from '@/components/Autocomplete';
+import { arError } from '@/lib/error-translator';
 
 export default function TreasuryPage() {
   const supabase = createClient();
@@ -165,7 +166,7 @@ export default function TreasuryPage() {
       await loadData();
       await loadCustomersSuppliers();
     } catch (err: any) {
-      alert('خطأ: ' + err.message);
+      alert(arError(err));
     } finally {
       setSavingCash(false);
     }
@@ -190,7 +191,7 @@ export default function TreasuryPage() {
       setQuickRegName('');
       setQuickRegPhone('');
     } catch (err: any) {
-      alert('خطأ: ' + err.message);
+      alert(arError(err));
     } finally {
       setRegisteringNew(false);
     }
@@ -218,7 +219,7 @@ export default function TreasuryPage() {
       notes: notes || 'نثريات تشغيل دورية'
     }]);
 
-    if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+    if (error) { showToast(arError(error), 'error'); return; }
 
     setAmount(''); setEntityName(''); setNotes('');
     setShowExpenseModal(false);

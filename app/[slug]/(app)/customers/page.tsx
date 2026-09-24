@@ -7,6 +7,7 @@ import { getCurrentTenantId } from '@/lib/tenant-client';
 import DataTable from '@/components/DataTable';
 import * as XLSX from 'xlsx';
 import { FileText, Wallet, History, TrendingDown, TrendingUp, Download, ExternalLink } from 'lucide-react';
+import { arError } from '@/lib/error-translator';
 
 export default function CustomersPage() {
   const supabase = createClient();
@@ -158,7 +159,7 @@ export default function CustomersPage() {
       notes: 'تحصيل دفعة واردة'
     }]);
 
-    if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+    if (error) { showToast(arError(error), 'error'); return; }
 
     const newBalance = Math.max(0, Number(selectedCust.balance || 0) - Number(paymentAmount));
     await supabase.from('customers').update({ balance: newBalance }).eq('tenant_id', getCurrentTenantId()).eq('id', selectedCust.id);

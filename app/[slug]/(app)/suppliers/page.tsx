@@ -7,6 +7,7 @@ import { getCurrentTenantId } from '@/lib/tenant-client';
 import DataTable from '@/components/DataTable';
 import * as XLSX from 'xlsx';
 import { Wallet, History, TrendingDown, TrendingUp, Download, ExternalLink } from 'lucide-react';
+import { arError } from '@/lib/error-translator';
 
 export default function SuppliersPage() {
   const supabase = createClient();
@@ -146,7 +147,7 @@ export default function SuppliersPage() {
       notes: 'سداد دفعة صادرة للمورد'
     }]);
 
-    if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+    if (error) { showToast(arError(error), 'error'); return; }
 
     const newBalance = Math.max(0, currentBal - Number(payoutAmount));
     await supabase.from('suppliers').update({ balance: newBalance }).eq('tenant_id', getCurrentTenantId()).eq('id', selectedSupp.id);

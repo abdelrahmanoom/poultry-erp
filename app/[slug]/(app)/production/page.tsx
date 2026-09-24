@@ -6,6 +6,7 @@ import { getCurrentTenantId } from '@/lib/tenant-client';
 import { Scissors, CheckCircle, AlertTriangle, RefreshCw, Plus, Save } from 'lucide-react';
 import ProductFormModal from '@/components/ProductFormModal';
 import Autocomplete from '@/components/Autocomplete';
+import { arError } from '@/lib/error-translator';
 
 // ربط product_code بعمود yield_processing
 const YIELD_COLUMN_MAP: any = {
@@ -161,10 +162,10 @@ export default function ProductionPage() {
       ];
 
       const { error } = await supabase.from('system_settings').upsert(items, { onConflict: 'tenant_id,setting_key' });
-      if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+      if (error) { showToast(arError(error), 'error'); return; }
       showToast('تم حفظ التكاليف كافتراضي');
     } catch (e: any) {
-      showToast('خطأ: ' + e.message, 'error');
+      showToast(arError(e), 'error');
     }
   };
 
@@ -225,7 +226,7 @@ export default function ProductionPage() {
       if (paths) setPathwaysList(paths);
       setPathway(newCode);
     } catch (err: any) {
-      alert('خطأ: ' + err.message);
+      alert(arError(err));
     } finally {
       setSavingPathway(false);
     }
@@ -340,7 +341,7 @@ export default function ProductionPage() {
       setSupplierName('');
       setActualQtys({});
     } catch (err: any) {
-      showToast('خطأ: ' + err.message, 'error');
+      showToast(arError(err), 'error');
     } finally {
       setLoading(false);
     }

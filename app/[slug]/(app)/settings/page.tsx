@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { getCurrentTenantId } from '@/lib/tenant-client';
 import { Plus, Trash2, BookOpen, Wallet, X, ChevronDown, ChevronLeft, Package, AlertTriangle, RefreshCw, Eye, EyeOff, Truck, Pencil, Building2, UserCheck, Users, Boxes, Bell, BellOff, Lock, Mail, MapPin, FileText, Calendar, Save, CheckCircle, Download, Link2 as LinkIcon } from 'lucide-react';
+import { arError } from '@/lib/error-translator';
 
 export default function SettingsPage() {
   const supabase = createClient();
@@ -196,7 +197,7 @@ export default function SettingsPage() {
       tenant_id: getCurrentTenantId(),
       product_name_ar: pName.trim(), stock_kg: 0, pricing_type: pType, pricing_value: Number(pValue), is_active: true
     }]);
-    if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+    if (error) { showToast(arError(error), 'error'); return; }
     setPName(''); loadData(); showToast('تم إضافة الصنف بكود تلقائي');
   };
 
@@ -297,7 +298,7 @@ export default function SettingsPage() {
       tenant_id: getCurrentTenantId(),
       treasury_code: code, name_ar: newTreasuryName.trim(), account_type: newTreasuryType, is_active: true
     }]);
-    if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+    if (error) { showToast(arError(error), 'error'); return; }
     setNewTreasuryName(''); setShowNewTreasuryForm(false);
     loadData(); showToast('تم إنشاء الخزينة');
   };
@@ -606,7 +607,7 @@ export default function SettingsPage() {
     }).eq('id', 1);
     setBusinessSaving(false);
 
-    if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+    if (error) { showToast(arError(error), 'error'); return; }
 
     // إذا تغيّر الـ slug → حدّث localStorage + cookie + أعد التوجيه
     if (newSlug && oldSlug && newSlug !== oldSlug) {
@@ -657,7 +658,7 @@ export default function SettingsPage() {
       is_active: true,
     }]);
 
-    if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+    if (error) { showToast(arError(error), 'error'); return; }
 
     showToast('تم إضافة المستخدم');
     setShowNewUserForm(false);
@@ -697,7 +698,7 @@ export default function SettingsPage() {
 
     const { error } = await supabase.from('system_users').update(updateData).eq('tenant_id', getCurrentTenantId()).eq('id', editingUser.id);
 
-    if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+    if (error) { showToast(arError(error), 'error'); return; }
     showToast('تم التحديث');
     setEditingUser(null);
     setEditingUserPassword('');
@@ -712,7 +713,7 @@ export default function SettingsPage() {
     const hash = await bcryptLib.hash(newPasswordForUser.trim(), 10);
 
     const { error } = await supabase.from('system_users').update({ password_hash: hash }).eq('tenant_id', getCurrentTenantId()).eq('id', changingPasswordUser.id);
-    if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+    if (error) { showToast(arError(error), 'error'); return; }
 
     showToast('تم تغيير كلمة المرور');
     setChangingPasswordUser(null);
@@ -723,7 +724,7 @@ export default function SettingsPage() {
     if (user.username === 'admin') { showToast('لا يمكن حذف المدير', 'error'); return; }
     if (!confirm('تأكيد حذف المستخدم ' + user.username + '؟')) return;
     const { error } = await supabase.from('system_users').delete().eq('tenant_id', getCurrentTenantId()).eq('id', user.id);
-    if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+    if (error) { showToast(arError(error), 'error'); return; }
     showToast('تم الحذف');
     loadUsers();
   };
