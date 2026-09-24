@@ -120,6 +120,7 @@ export default function SlugLoginPage() {
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                placeholder="أدخل اسم المستخدم"
                 autoComplete="username"
                 className="w-full border-2 border-slate-200 rounded-xl px-3 pr-11 h-12 text-sm font-bold bg-slate-50 outline-none focus:border-blue-600 focus:bg-white transition"
               />
@@ -136,6 +137,7 @@ export default function SlugLoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                placeholder="أدخل كلمة المرور"
                 autoComplete="current-password"
                 className="w-full border-2 border-slate-200 rounded-xl pl-11 pr-11 h-12 text-sm font-bold bg-slate-50 outline-none focus:border-blue-600 focus:bg-white transition"
               />

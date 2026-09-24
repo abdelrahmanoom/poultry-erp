@@ -11,21 +11,28 @@ function getSupabaseAdmin() {
 const MAX_ATTEMPTS = 5;
 const WINDOW_MINUTES = 15;
 
-async function logAttempt(identifier: string, ip: string, success: boolean, ua: string) {
-  await getSupabaseAdmin().from('login_attempts').insert([{
+function logAttempt(identifier: string, ip: string, success: boolean, ua: string) {
+  // fire-and-forget — لا ننتظر
+  getSupabaseAdmin().from('login_attempts').insert([{
     identifier, ip_address: ip, success, user_agent: ua,
-  }]);
+  }]).then(() => {}).catch(() => {});
 }
 
 async function isRateLimited(identifier: string, ip: string): Promise<boolean> {
   const since = new Date(Date.now() - WINDOW_MINUTES * 60 * 1000).toISOString();
-  const { count: userFails } = await getSupabaseAdmin()
-    .from('login_attempts').select('*', { count: 'exact', head: true })
-    .eq('identifier', identifier).eq('success', false).gte('created_at', since);
-  const { count: ipFails } = await getSupabaseAdmin()
-    .from('login_attempts').select('*', { count: 'exact', head: true })
-    .eq('ip_address', ip).eq('success', false).gte('created_at', since);
-  return (userFails || 0) >= MAX_ATTEMPTS || (ipFails || 0) >= MAX_ATTEMPTS * 2;
+  const { data } = await getSupabaseAdmin()
+    .from('login_attempts')
+    .select('identifier, ip_address')
+    .eq('success', false)
+    .gte('created_at', since)
+    .or('identifier.eq.' + identifier + ',ip_address.eq.' + ip);
+  if (!data) return false;
+  let userFails = 0, ipFails = 0;
+  data.forEach((r: any) => {
+    if (r.identifier === identifier) userFails++;
+    if (r.ip_address === ip) ipFails++;
+  });
+  return userFails >= MAX_ATTEMPTS || ipFails >= MAX_ATTEMPTS * 2;
 }
 
 export async function POST(request: Request) {
@@ -41,27 +48,27 @@ export async function POST(request: Request) {
     }
 
     if (await isRateLimited(username, ip)) {
-      await logAttempt(username, ip, false, ua);
+      logAttempt(username, ip, false, ua);
       return NextResponse.json({ success: false, error: 'محاولات دخول كثيرة — حاول بعد 15 دقيقة' }, { status: 429 });
     }
 
     const result = await tenantLogin(username, password, slug);
 
     if (!result.success) {
-      await logAttempt(username, ip, false, ua);
-      await logAction({
+      logAttempt(username, ip, false, ua);
+      logAction({
         action: 'login_failed', userName: username, entityType: 'auth',
         details: { reason: result.error, slug: slug || null }, ipAddress: ip,
-      });
+      }).catch(() => {});
       return NextResponse.json(result, { status: 401 });
     }
 
-    await logAttempt(username, ip, true, ua);
-    await logAction({
+    logAttempt(username, ip, true, ua);
+    logAction({
       tenantId: result.user?.tenant_id, userId: result.user?.id,
       userName: result.user?.username || username, action: 'login',
       entityType: 'auth', details: { slug: slug || null }, ipAddress: ip,
-    });
+    }).catch(() => {});
 
     const jwtToken = signTenantJWT({
       tenant_id: result.user!.tenant_id,
