@@ -8,11 +8,14 @@ import {
   Wallet, FileText, Settings, LogOut, Menu, X, HelpCircle
 } from 'lucide-react';
 import TourGuide from '@/components/TourGuide';
+import { createClient } from '@/lib/supabase/client';
 import PasswordChangeModal from '@/components/PasswordChangeModal';
 import ReadOnlyBanner from '@/components/ReadOnlyBanner';
+import TenantLogo from '@/components/TenantLogo';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<any>(null);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [slug, setSlug] = useState('');
   const [isReadOnly, setIsReadOnly] = useState(false);
@@ -20,6 +23,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   const router = useRouter();
+  const supabase = createClient();
   const pathname = usePathname();
   const params = useParams();
 
@@ -38,6 +42,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     try {
       const parsed = JSON.parse(sessionStr);
       setUser(parsed);
+      // جلب شعار النشاط
+      (async () => {
+        try {
+          const tid = parsed.tenant_id;
+          if (tid) {
+            const { data } = await supabase.from('tenants').select('logo_url').eq('id', tid).maybeSingle();
+            if (data?.logo_url) setLogoUrl(data.logo_url);
+          }
+        } catch (e) {}
+      })();
 
       // slug: من params → user → cookie
       const urlSlug = params?.slug ? String(params.slug) : '';

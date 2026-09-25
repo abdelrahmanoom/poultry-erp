@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { getCurrentTenantId } from '@/lib/tenant-client';
-import { Plus, Trash2, BookOpen, Wallet, X, ChevronDown, ChevronLeft, Package, AlertTriangle, RefreshCw, Eye, EyeOff, Truck, Pencil, Building2, UserCheck, Users, Boxes, Bell, BellOff, Lock, Mail, MapPin, FileText, Calendar, Save, CheckCircle, Download, Link2 as LinkIcon } from 'lucide-react';
+import TenantLogo from '@/components/TenantLogo';
 import { arError } from '@/lib/error-translator';
+import { Plus, Trash2, BookOpen, Wallet, X, ChevronDown, ChevronLeft, Package, AlertTriangle, RefreshCw, Eye, EyeOff, Truck, Pencil, Building2, UserCheck, Users, Boxes, Bell, BellOff, Lock, Mail, MapPin, FileText, Calendar, Save, CheckCircle, Download, Link2 as LinkIcon } from 'lucide-react';
 
 export default function SettingsPage() {
   const supabase = createClient();
@@ -99,6 +100,7 @@ export default function SettingsPage() {
   const [slugCheckStatus, setSlugCheckStatus] = useState<string>('idle');
   const [slugCheckMessage, setSlugCheckMessage] = useState('');
   const [businessSaving, setBusinessSaving] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
   const [showNewUserForm, setShowNewUserForm] = useState(false);
   const [newUserName, setNewUserName] = useState('');
   const [newUserFullName, setNewUserFullName] = useState('');
@@ -580,6 +582,77 @@ export default function SettingsPage() {
     } else {
       setSlugCheckStatus('available');
       setSlugCheckMessage('المعرّف متاح');
+    }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // فحص الحجم
+    if (file.size > 2 * 1024 * 1024) {
+      showToast('حجم الصورة كبير جداً — الحد الأقصى 2 ميجابايت', 'error');
+      return;
+    }
+
+    // فحص النوع
+    const allowed = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml', 'image/gif'];
+    if (!allowed.includes(file.type)) {
+      showToast('نوع الصورة غير مدعوم — استخدم PNG أو JPG أو WEBP', 'error');
+      return;
+    }
+
+    setLogoUploading(true);
+    try {
+      const tid = getCurrentTenantId() || 1;
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
+      const filename = 'tenant-' + tid + '-' + Date.now() + '.' + ext;
+
+      const { error: upErr } = await supabase.storage
+        .from('tenant-logos')
+        .upload(filename, file, { upsert: true, contentType: file.type });
+
+      if (upErr) throw upErr;
+
+      const { data: urlData } = supabase.storage
+        .from('tenant-logos')
+        .getPublicUrl(filename);
+
+      const publicUrl = urlData.publicUrl;
+
+      // تحديث tenants.logo_url
+      const { error: dbErr } = await supabase
+        .from('tenants')
+        .update({ logo_url: publicUrl, updated_at: new Date().toISOString() })
+        .eq('id', tid);
+
+      if (dbErr) throw dbErr;
+
+      setBusinessData({ ...businessData, logo_url: publicUrl });
+      showToast('تم رفع الشعار بنجاح');
+    } catch (err: any) {
+      showToast(arError(err), 'error');
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  const handleLogoDelete = async () => {
+    if (!confirm('حذف الشعار الحالي؟')) return;
+    setLogoUploading(true);
+    try {
+      const tid = getCurrentTenantId() || 1;
+      const { error } = await supabase
+        .from('tenants')
+        .update({ logo_url: null })
+        .eq('id', tid);
+      if (error) throw error;
+      setBusinessData({ ...businessData, logo_url: null });
+      showToast('تم حذف الشعار');
+    } catch (err: any) {
+      showToast(arError(err), 'error');
+    } finally {
+      setLogoUploading(false);
     }
   };
 
@@ -1612,6 +1685,38 @@ export default function SettingsPage() {
             <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
+                  <div className="col-span-full pb-4 border-b border-slate-200">
+                    <label className="block text-xs font-bold text-slate-700 mb-3">شعار النشاط</label>
+                    <div className="flex flex-wrap items-center gap-4">
+                      <TenantLogo logoUrl={businessData.logo_url} tenantName={businessData.name} size="xl" />
+                      <div className="flex flex-col gap-2">
+                        <label className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs inline-flex items-center gap-2 transition">
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif"
+                            onChange={handleLogoUpload}
+                            disabled={logoUploading}
+                            className="hidden"
+                          />
+                          {logoUploading ? 'جاري الرفع...' : (businessData.logo_url ? 'تغيير الشعار' : 'رفع شعار جديد')}
+                        </label>
+                        {businessData.logo_url && (
+                          <button
+                            type="button"
+                            onClick={handleLogoDelete}
+                            disabled={logoUploading}
+                            className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold px-4 py-2.5 rounded-xl text-xs"
+                          >
+                            حذف الشعار
+                          </button>
+                        )}
+                        <p className="text-[10px] text-slate-500 font-bold">
+                          PNG • JPG • WEBP • حد أقصى 2 ميجابايت
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
                   <label className="block text-xs font-bold text-slate-700 mb-1">اسم النشاط التجاري *</label>
                   <input type="text" value={businessData.name || ''} onChange={(e) => setBusinessData({ ...businessData, name: e.target.value })} className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold bg-slate-50 outline-none focus:border-blue-600" />
                 </div>

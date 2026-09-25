@@ -13,7 +13,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
 
   const { data, error } = await getSupabaseAdmin()
     .from('tenants')
-    .select('name, is_active')
+    .select('id, name, logo_url, is_active')
     .eq('slug', slug)
     .eq('is_active', true)
     .maybeSingle();
@@ -26,5 +26,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     return NextResponse.json({ error: 'النشاط غير موجود' }, { status: 404 });
   }
 
-  return NextResponse.json({ name: data.name });
+  return NextResponse.json({
+    name: data.name,
+    logo_url: data.logo_url || null,
+  });
 }

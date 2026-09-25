@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Lock, User, AlertCircle, Eye, EyeOff, Boxes, Hash } from 'lucide-react';
+import TenantLogo from '@/components/TenantLogo';
 
 export default function LoginPage() {
   const [slug, setSlug] = useState('');
@@ -76,7 +77,7 @@ export default function LoginPage() {
         {/* الشعار والعنوان */}
         <div className="text-center space-y-3">
           <div className="bg-gradient-to-br from-blue-600 to-blue-700 p-3 rounded-2xl w-fit mx-auto shadow-lg shadow-blue-600/30">
-            <Boxes className="w-7 h-7 text-white" />
+            <TenantLogo size="lg" rounded={true} />
           </div>
           <div>
             <h1 className="text-xl font-black text-slate-900">منظومة الإدارة</h1>

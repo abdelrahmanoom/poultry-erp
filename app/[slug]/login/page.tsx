@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Lock, User, AlertCircle, Eye, EyeOff, Boxes, Building2 } from 'lucide-react';
+import TenantLogo from '@/components/TenantLogo';
 
 export default function SlugLoginPage() {
   const router = useRouter();
@@ -16,6 +17,7 @@ export default function SlugLoginPage() {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [tenantName, setTenantName] = useState<string>('');
+  const [tenantLogoUrl, setTenantLogoUrl] = useState<string | null>(null);
 
   // جلب اسم النشاط من API (admin client — يتجاوز RLS)
   useEffect(() => {
@@ -30,7 +32,7 @@ export default function SlugLoginPage() {
         const data = await res.json();
         if (data?.name) {
           setTenantName(data.name);
-          // حفظ slug تلقائياً للزيارات القادمة
+          setTenantLogoUrl(data.logo_url || null);
           if (typeof window !== 'undefined') {
             localStorage.setItem('last_tenant_slug', slug);
           }
@@ -90,7 +92,7 @@ export default function SlugLoginPage() {
 
         <div className="text-center space-y-3">
           <div className="bg-gradient-to-br from-blue-600 to-blue-700 p-3 rounded-2xl w-fit mx-auto shadow-lg shadow-blue-600/30">
-            <Boxes className="w-7 h-7 text-white" />
+            <TenantLogo logoUrl={tenantLogoUrl} tenantName={tenantName} size="lg" />
           </div>
           <div>
             <h1 className="text-xl font-black text-slate-900">
