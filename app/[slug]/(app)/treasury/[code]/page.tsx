@@ -100,7 +100,7 @@ export default function TreasuryFilePage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white p-5 rounded-3xl border border-slate-200">
           <div className="flex items-center gap-2 text-emerald-500 mb-2 flex-wrap"><TrendingUp className="w-4 h-4" /><span className="text-xs font-bold">إجمالي الداخل</span></div>
           <p className="text-2xl font-black font-mono text-emerald-700">{totalIn.toLocaleString()} ج</p>

@@ -381,7 +381,7 @@ export default function ProductionPage() {
           </select>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {/* بيانات الدفعة */}
           <div className="bg-white p-5 rounded-3xl border border-slate-200 space-y-4">
             <h2 className="text-sm font-black text-slate-800 border-b pb-2">بيانات الدفعة</h2>

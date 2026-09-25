@@ -179,7 +179,7 @@ export default function HelpPage() {
       </div>
 
       {/* Quick stats */}
-      <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-5 rounded-3xl border border-blue-200">
           <div className="flex items-center gap-2 mb-2 flex-wrap">
             <BookOpen className="w-5 h-5 text-blue-700" />

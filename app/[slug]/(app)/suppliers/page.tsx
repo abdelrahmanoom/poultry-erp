@@ -311,7 +311,7 @@ export default function SuppliersPage() {
             <div className="flex gap-2 items-center flex-wrap"><button onClick={() => { const code = selectedSupp.supplier_code || selectedSupp.id; setSelectedSupp(null); router.push('/suppliers/' + code); }} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1 flex-wrap"><ExternalLink className="w-3.5 h-3.5" /><span>فتح الملف الكامل</span></button><button onClick={() => setSelectedSupp(null)} className="text-slate-400 hover:text-slate-700 font-bold text-sm">إغلاق</button></div>
           </div>
 
-          <div className="p-5 grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="p-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-rose-50 p-4 rounded-2xl border border-rose-200">
               <span className="text-xs font-bold text-rose-700 block mb-1">الرصيد الدائن المستحق للمورد</span>
               <p className="text-2xl font-black text-rose-700 font-mono">{Number(selectedSupp.balance).toLocaleString()} ج</p>
@@ -332,7 +332,7 @@ export default function SuppliersPage() {
                 <Wallet className="w-5 h-5" />
                 <h3 className="text-sm font-black">تسجيل سداد دفعة صادرة</h3>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <input type="number" value={payoutAmount} onChange={(e) => setPayoutAmount(e.target.value)} placeholder="المبلغ" className="border-2 border-slate-200 rounded-xl px-4 text-sm font-bold bg-white h-11 font-mono outline-none" required />
                 <select value={selectedTreasury} onChange={(e) => setSelectedTreasury(e.target.value)} className="border-2 border-slate-200 rounded-xl px-3 text-sm font-bold bg-white h-11" required>
                   {treasuries.map(t => (

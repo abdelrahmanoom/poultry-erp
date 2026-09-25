@@ -1114,7 +1114,7 @@ export default function SettingsPage() {
           <div className="space-y-6">
             <form onSubmit={handleAddProduct} className="bg-slate-50 p-6 rounded-3xl border space-y-4">
               <h3 className="text-xs font-black text-slate-800">إضافة صنف جديد (الكود يُولَّد تلقائياً)</h3>
-              <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-4 text-xs font-bold">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs font-bold">
                 <div><label className="block text-slate-700 mb-1.5">الاسم:</label><input type="text" value={pName} onChange={(e) => setPName(e.target.value)} className="w-full border rounded-xl px-3 bg-white h-11" required /></div>
                 <div><label className="block text-slate-700 mb-1.5">طريقة التسعير:</label><select value={pType} onChange={(e) => setPType(e.target.value)} className="w-full border rounded-xl px-2 bg-white h-11"><option value="multiplier">معامل ضرب في البورصة</option><option value="addition">إضافة ثابتة</option><option value="fixed">سعر حر</option></select></div>
                 <div><label className="block text-slate-700 mb-1.5">المعامل:</label><input type="number" step="0.05" value={pValue} onChange={(e) => setPValue(e.target.value)} className="w-full border rounded-xl px-3 bg-white h-11 font-mono" required /></div>
@@ -1165,7 +1165,7 @@ export default function SettingsPage() {
             </div>
             {showNewTreasuryForm && (
               <form onSubmit={handleAddTreasury} className="bg-slate-50 p-5 rounded-2xl border space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
                   <div><label className="block text-xs font-bold text-slate-700 mb-1.5">الاسم:</label><input type="text" value={newTreasuryName} onChange={(e) => setNewTreasuryName(e.target.value)} className="w-full border-2 rounded-xl px-4 text-sm font-bold bg-white h-11" required /></div>
                   <div><label className="block text-xs font-bold text-slate-700 mb-1.5">النوع:</label>
                     <select value={newTreasuryType} onChange={(e) => setNewTreasuryType(e.target.value)} className="w-full border-2 rounded-xl px-3 text-sm font-bold bg-white h-11">
@@ -1367,7 +1367,7 @@ export default function SettingsPage() {
         {activeTab === 'logistics' && (
           <div className="space-y-6">
             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs text-slate-700 font-bold">القيم تُستخدم تلقائياً في شاشة الإنتاج، ويمكن تعديلها لكل دفعة على حدة.</div>
-            <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-4 text-xs font-bold">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs font-bold">
               <div className="bg-slate-50 p-5 rounded-2xl border space-y-1.5"><label className="block text-slate-700 font-bold flex items-center gap-1.5 flex-wrap"><Truck className="w-4 h-4 text-slate-700" /> تكلفة الشحن والتفريغ (ج):</label><input type="number" value={transCost} onChange={(e) => setTransCost(e.target.value)} className="w-full border-2 rounded-xl px-4 bg-white h-12 font-mono text-base" /></div>
               <div className="bg-slate-50 p-5 rounded-2xl border space-y-1.5"><label className="block text-slate-700 font-bold">أجور عمالة التنزيل (ج):</label><input type="number" value={labCost} onChange={(e) => setLabCost(e.target.value)} className="w-full border-2 rounded-xl px-4 bg-white h-12 font-mono text-base" /></div>
               <div className="bg-slate-50 p-5 rounded-2xl border space-y-1.5"><label className="block text-slate-700 font-bold">رسوم الوساطة التجارية (ج):</label><input type="number" value={brokCost} onChange={(e) => setBrokCost(e.target.value)} className="w-full border-2 rounded-xl px-4 bg-white h-12 font-mono text-base" /></div>
@@ -1550,7 +1550,7 @@ export default function SettingsPage() {
                     const hasValue = Number(c.balance) > 0;
                     return (
                       <div key={idx} className={'p-3 rounded-2xl border-2 transition space-y-2 ' + (hasValue ? 'bg-emerald-50/60 border-emerald-300' : 'bg-white border-slate-200')}>
-                        <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
                           <div>
                             <label className={'block text-[10px] font-bold mb-0.5 ' + (hasValue ? 'text-emerald-700' : 'text-slate-500')}>اسم العميل</label>
                             <input type="text" value={c.name} disabled={openingLocked} onChange={(e) => { const u = [...openCustomers]; u[idx].name = e.target.value; setOpenCustomers(u); }} className={'w-full border rounded-xl px-3 text-xs font-bold h-10 ' + (hasValue ? 'border-emerald-300 bg-white text-emerald-900' : 'border-slate-200 disabled:bg-slate-100')} />
@@ -1588,7 +1588,7 @@ export default function SettingsPage() {
                     const hasValue = Number(s.balance) > 0;
                     return (
                       <div key={idx} className={'p-3 rounded-2xl border-2 transition space-y-2 ' + (hasValue ? 'bg-emerald-50/60 border-emerald-300' : 'bg-white border-slate-200')}>
-                        <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
                           <div>
                             <label className={'block text-[10px] font-bold mb-0.5 ' + (hasValue ? 'text-emerald-700' : 'text-slate-500')}>اسم المورد</label>
                             <input type="text" value={s.name} disabled={openingLocked} onChange={(e) => { const u = [...openSuppliers]; u[idx].name = e.target.value; setOpenSuppliers(u); }} className={'w-full border rounded-xl px-3 text-xs font-bold h-10 ' + (hasValue ? 'border-emerald-300 bg-white text-emerald-900' : 'border-slate-200 disabled:bg-slate-100')} />
@@ -1786,7 +1786,7 @@ export default function SettingsPage() {
                 <input type="text" value={businessData.address || ''} onChange={(e) => setBusinessData({ ...businessData, address: e.target.value })} className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold bg-slate-50 outline-none focus:border-blue-600" />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">الدولة</label>
                   <input type="text" value={businessData.country || 'مصر'} onChange={(e) => setBusinessData({ ...businessData, country: e.target.value })} className="w-full border-2 border-slate-200 rounded-xl px-3 h-11 text-sm font-bold bg-slate-50 outline-none focus:border-blue-600" />
