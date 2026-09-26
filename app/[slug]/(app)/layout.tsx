@@ -115,7 +115,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <aside className="hidden md:flex w-64 bg-slate-900 text-slate-200 flex-col shrink-0 border-l border-slate-800 shadow-xl z-30">
         <div className="p-4 border-b border-slate-800 flex justify-between items-center flex-wrap gap-2 flex-wrap">
           <div>
-            <span className="font-black text-sm text-white block">{user?.tenant_name || 'منظومة الإدارة'}</span>
+            <span className="font-black text-sm text-white block">{user?.tenant_name || 'ثُلَاث'}</span>
             <span className="text-[10px] text-emerald-400 font-bold">{user?.full_name || ''}</span>
           </div>
           <button onClick={handleLogout} title="تسجيل الخروج" className="text-slate-400 hover:text-rose-400 p-1">
@@ -156,7 +156,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <button onClick={() => setDrawerOpen(true)} className="p-1.5 rounded-lg bg-slate-800">
             <Menu className="w-5 h-5 text-slate-200" />
           </button>
-          <span className="font-black text-xs">{user?.tenant_name || 'منظومة الإدارة'}</span>
+          <span className="font-black text-xs">{user?.tenant_name || 'ثُلَاث'}</span>
         </div>
         <span className="text-[11px] text-emerald-400 font-bold">{user?.full_name || ''}</span>
       </header>

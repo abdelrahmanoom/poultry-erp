@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "دواجن سنتر | منظومة إدارة وتشغيل وتوزيع الدواجن",
-  description: "المنظومة السحابية المتكاملة لإدارة وتوريد الدواجن",
+  title: "ثُلَاث | منظومة إدارة الأنشطة التجارية",
+  description: "منظومة سحابية متكاملة لإدارة الأنشطة التجارية والتوريد والتوزيع",
 };
 
 export default function RootLayout({
