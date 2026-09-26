@@ -4,13 +4,20 @@ import type { NextRequest } from 'next/server';
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // 1. ملفات ثابتة + API
+  // 1. ملفات ثابتة + API + أيقونات Next.js
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api') ||
     pathname.startsWith('/static') ||
     pathname === '/favicon.ico' ||
-    /\.(ico|png|jpg|jpeg|svg|gif|webp|css|js|woff2?)$/.test(pathname)
+    pathname === '/icon' ||
+    pathname === '/apple-icon' ||
+    pathname === '/opengraph-image' ||
+    pathname === '/twitter-image' ||
+    pathname === '/manifest.json' ||
+    pathname === '/robots.txt' ||
+    pathname === '/sitemap.xml' ||
+    /\.(ico|png|jpg|jpeg|svg|gif|webp|css|js|woff2?|ttf|otf)$/.test(pathname)
   ) return NextResponse.next();
 
   // 2. Master — لا يتأثر بالجلسة
