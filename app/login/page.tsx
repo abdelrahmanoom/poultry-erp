@@ -112,13 +112,14 @@ export default function LoginGatewayPage() {
                 required
                 value={slug}
                 onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                placeholder="unknown"
+                placeholder="مثال: unknown"
                 autoComplete="off"
                 autoFocus
                 dir="ltr"
-                className="w-full border-2 border-slate-200 rounded-xl px-3 pr-11 h-14 text-base font-bold bg-slate-50 outline-none focus:border-blue-600 focus:bg-white transition text-center tracking-widest font-mono"
+                className="w-full border-2 border-slate-200 rounded-xl pl-11 pr-11 h-14 text-base font-bold bg-slate-50 outline-none focus:border-blue-600 focus:bg-white transition font-mono"
+                style={{ textAlign: 'left' }}
               />
-              <Hash className="w-5 h-5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Hash className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
           </div>
 
