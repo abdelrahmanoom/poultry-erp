@@ -80,7 +80,7 @@ export default function LoginPage() {
             <TenantLogo size="lg" rounded={true} />
           </div>
           <div>
-            <h1 className="text-xl font-black text-slate-900">ثُلَاث</h1>
+            <h1 className="text-xl font-black text-slate-900">منظومة الإدارة</h1>
             <p className="text-xs text-slate-500 font-bold mt-1">أدخل بياناتك للوصول لنشاطك</p>
           </div>
         </div>
